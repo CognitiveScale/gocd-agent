@@ -1,0 +1,33 @@
+consul = "consul.service.consul:8500"
+log-level = "info"
+
+vault {
+  address = "https://vault.service.consul:8200"
+// token is from VAULT_TOKEN env variable..
+  renew = true
+  ssl {
+    enabled = true
+    verify = true
+    cert = "/certs/vault.pem"
+    ca_cert = "/certs/ca.pem"
+  }
+}
+
+template {
+  source = "/consul-template/templates/id_rsa.ctmpl"
+  destination = "/root/.ssh/id_rsa"
+  command = "ssh-keyscan github.com >> /root/.ssh/known_hosts"
+  perms = "600"
+}
+
+template {
+  source = "/consul-template/templates/sbt_credentials.ctmpl"
+  destination = "/root/.sbt/credentials"
+  perms = "600"
+}
+
+template {
+  source = "/consul-template/templates/docker_login.ctmpl"
+  destination = "/root/.docker/config.json"
+  perms = "600"
+}

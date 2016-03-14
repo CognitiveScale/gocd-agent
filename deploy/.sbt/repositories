@@ -1,0 +1,4 @@
+[repositories]
+  local
+  c12e-all-ivy: https://cognitivescale.artifactoryonline.com/cognitivescale/all-ivy/, [organization]/[module]/(scala_[scalaVersion]/)(sbt_[sbtVersion]/)[revision]/[type]s/[artifact](-[classifier]).[ext]
+  c12e-all-maven: https://cognitivescale.artifactoryonline.com/cognitivescale/all-maven/

@@ -1,0 +1,10 @@
+{{with secret "secret/gocd/dockerhub"}}
+{
+	"auths": {
+		"https://index.docker.io/v1/": {
+			"auth": "{{"$secret.Data.auth"}}",
+			"email": "{{"$secret.Data.email"}}"
+		}
+	}
+}
+{{end}}
