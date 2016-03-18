@@ -26,5 +26,5 @@ Add deploy/*.ctmpl  /consul-template/templates/
 Add deploy/gocd-agent.json /consul-template/config.d/gocd-agent.json
 ENV JAVA_HOME=/usr/lib/jvm/default-jvm GO_SERVER=go-server GO_SERVER_PORT=8153
 WORKDIR /tmp
-VOLUME ["/work","/cache"]
+VOLUME ["/work","/root"]
 CMD ["/run.sh"]

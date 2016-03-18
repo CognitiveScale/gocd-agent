@@ -16,6 +16,8 @@ function goping {
 
 while true; do goping && break || echo -n .; sleep 5; done
 
+[ -f /work/.agent-bootstrapper.running ] &&  rm -f /work/.agent-bootstrapper.running
+
 /opt/go-agent/agent.sh &
 # wait for the agent to annouce itself..
 sleep 10

@@ -2,11 +2,11 @@ consul = "consul.service.consul:8500"
 log_level = "info"
 
 vault {
-  address = "http://vault.service.consul:8200"
+  address = "https://vault.service.consul:8200"
 // token is from VAULT_TOKEN env variable..
   renew = true
   ssl {
-    enabled = false
+    enabled = true
   }
 }
 

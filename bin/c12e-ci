@@ -13,8 +13,7 @@ set_globals()
     DOCKER_TAG_ENFORCE="false"
     IMAGE_NAMESPACE="c12e"
     IMAGE_NAMESPACE_DEFAULT="c12e"
-    VOLUME_BUILD_HOME_RW=$(docker inspect $HOSTNAME | jq -r '.[0].Mounts[] | select(.Destination | contains("/cache")) | .Name')
-    VOLUME_BUILD_HOME_RO=$(docker inspect $HOSTNAME | jq -r '.[0].Mounts[] | select(.Destination | contains("/static")) | .Name')
+    VOLUME_BUILD_HOME_RW=$(docker inspect $HOSTNAME | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
     VOLUME_BUILD_WORKSPACE="$(pwd)"
     VOLUME_SERVICE_TMP="/tmp"
     DEBUG_LEVEL="0"  # IDEA: actually use DEBUG_LEVEL
@@ -56,10 +55,6 @@ Options:
         when building, the volume to mount as root/ for caching
         (default: $VOLUME_BUILD_HOME_RW)
 
-    -R VOLUME_BUILD_HOME_RO
-        a volume with static files to copy to root/
-        (default: $VOLUME_BUILD_HOME_RO)
-
     -t VOLUME_SERVICE_TMP
         volume to mount for temporary data of build dependency containers
         (default: $VOLUME_SERVICE_TMP)
@@ -84,7 +79,7 @@ main()
 {
     set_globals
     source_conf
-    while getopts n:i:c:s:I:W:R:t:w:N:pvh f
+    while getopts n:i:c:s:I:W:t:w:N:pvh f
     do
         case $f in
             n) JOB_NAME="$(canonical $OPTARG)";;
@@ -93,7 +88,6 @@ main()
             s) SERVICE_IMAGES="$SERVICE_IMAGES $OPTARG";;
             I) JOB_ID="$(canonical $OPTARG)";;
             W) VOLUME_BUILD_HOME_RW="$(abspath "$OPTARG")";;
-            R) VOLUME_BUILD_HOME_RO="$(abspath "$OPTARG")";;
             t) VOLUME_SERVICE_TMP="$(abspath "$OPTARG")";;
             w) VOLUME_BUILD_WORKSPACE="$(abspath "$OPTARG")";;
             N) IMAGE_NAMESPACE="$(canonical $OPTARG)";;
@@ -123,7 +117,6 @@ main()
             "$SERVICE_IMAGES" \
             "$VOLUME_BUILD_WORKSPACE" \
             "$VOLUME_BUILD_HOME_RW" \
-            "$VOLUME_BUILD_HOME_RO" \
             "$JOB_IMAGE_BASE" \
             "$@"
     else
@@ -136,7 +129,6 @@ main()
                 "$SERVICE_IMAGES" \
                 "$VOLUME_BUILD_WORKSPACE" \
                 "$VOLUME_BUILD_HOME_RW" \
-                "$VOLUME_BUILD_HOME_RO" \
                 "$JOB_IMAGE_BASE" \
                 "$@"
             header "building Docker image"
@@ -242,9 +234,8 @@ run_ci_job_with_services()
     local service_images="$3"
     local volume_build_workspace="$4"
     local volume_build_home_rw="$5"
-    local volume_build_home_ro="$6"
-    local job_image_base="$7"
-    shift 7
+    local job_image_base="$6"
+    shift 6
     set_cleanup "$service_dir" "$volume_build_workspace" "$container_name_prefix"
     link_switches="$(
         start_services \
@@ -253,7 +244,6 @@ run_ci_job_with_services()
         "$container_name_prefix" \
         "$volume_build_workspace" \
         "$volume_build_home_rw" \
-        "$volume_build_home_ro" \
         "$link_switches" \
         "$job_image_base" \
         "$@"
@@ -418,15 +408,9 @@ run_ci_job()
     local container_name_prefix="$1"
     local workspace_dir="$2"
     local home_rw="$3"
-    local home_ro="$4"
-    local link_switches="$5"
-    local build_image_base="$6"
-    shift 6
-    docker run --rm \
-      -v ${home_rw}:/cache \
-      -v ${home_ro}:/static \
-      busybox:latest \
-      find /static -maxdepth 1 -mindepth 1 -exec cp -r {} /cache \;
+    local link_switches="$4"
+    local build_image_base="$5"
+    shift 5
 
     docker run \
       --rm \
