@@ -8,8 +8,7 @@ vault {
   ssl {
     enabled = true
     verify  = false
-    cert    = "/etc/consul/ssl/consul.cert"
-    ca_cert = "/etc/consul/ssl/ca.cert"
+    ca_cert = "/etc/pki/tls/certs/ca-bundle.crt"
   }
 }
 
