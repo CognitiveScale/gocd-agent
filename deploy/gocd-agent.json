@@ -1,14 +1,14 @@
-consul = "consul.service.consul:8500"
+consul = "localhost:8500"
 log_level = "info"
 
 vault {
-  address = "https://consul.service.consul:8200"
+  address = "http://localhost:8200"
 // token is from VAULT_TOKEN env variable..
   renew = true
   ssl {
-    enabled = true
-    verify  = false
-    ca_cert = "/etc/pki/tls/certs/ca-bundle.crt"
+    enabled = false
+//    verify  = false
+//    ca_cert = "/etc/pki/tls/certs/ca-bundle.crt"
   }
 }
 

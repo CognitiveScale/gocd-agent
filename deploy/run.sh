@@ -6,8 +6,9 @@ AGENT_RESOURCES=${AGENT_RESOURCES:-"docker,bash,git,jdk"}
 export AGENT_WORK_DIR=${AGENT_WORK_DIR:-"/work"}
 #export AGENT_ENVIRONMENTS=${AGENT_ENVIRONMENTS:-"DEV"}
 export LOG_DIR=${AGENT_WORK_DIR}/logs
-
-SERVER_BASE=http://${GO_SERVER}:${GO_SERVER_PORT}/go/api
+export GO_SERVER_PORT=8153
+export GO_SERVER=go-server
+SERVER_BASE=http://${GO_SERVER}:8153/go/api
 
 # need to ping server instead
 function goping {
