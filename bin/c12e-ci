@@ -13,11 +13,12 @@ set_globals()
     DOCKER_TAG_ENFORCE="false"
     IMAGE_NAMESPACE="c12e"
     IMAGE_NAMESPACE_DEFAULT="c12e"
-    VOLUME_BUILD_HOME_RW=$(docker inspect $HOSTNAME | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
+# Rancher mangles the name ... grrrr...
+    CONTAINER=r-${HOSTNAME}
+    VOLUME_BUILD_HOME_RW=$(docker inspect $CONTAINER | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
     VOLUME_BUILD_WORKSPACE="$(pwd)"
     VOLUME_SERVICE_TMP="/tmp"
     DEBUG_LEVEL="0"  # IDEA: actually use DEBUG_LEVEL
-
     USAGE="$PROG_NAME -n JOB_NAME -i JOB_IMAGE_BASE [options]...
     COMMAND ARGS...
 
@@ -415,7 +416,7 @@ run_ci_job()
     docker run \
       --rm \
       --name "${container_name_prefix}_builder" \
-      --volumes-from=${HOSTNAME} \
+      --volumes-from=${CONTAINER} \
       --user root \
       --env HOME=/root \
       --env USER=root \
