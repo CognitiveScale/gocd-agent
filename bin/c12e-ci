@@ -328,7 +328,7 @@ start_services()
     local service_dir="$1"
     local container_name_prefix="$2"
     shift 2
-    docker run -d --volume=/data --name="$container_name_prefix"_data busybox > /dev/null
+    docker run -d --volume=/data --net container:$CONTAINER --name="$container_name_prefix"_data busybox > /dev/null
     for service_image in $@
     do start_service "$service_dir" "$container_name_prefix" "$service_image"
     done
@@ -395,6 +395,7 @@ run_service()
 
     docker run \
         --name "${container_name}" \
+        --net container:$CONTAINER \
         --detach \
         $(service_volumes "$image_repo" "$log_dir" "/data") \
 	--volumes-from="$data_container" \
@@ -416,6 +417,7 @@ run_ci_job()
     docker run \
       --rm \
       --name "${container_name_prefix}_builder" \
+      --net container:$CONTAINER \
       --volumes-from=${CONTAINER} \
       --user root \
       --env HOME=/root \
