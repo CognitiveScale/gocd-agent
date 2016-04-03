@@ -1,6 +1,5 @@
-#!/bin/sh -eu
+#!/bin/bash -ux
 ORIG_PROG_BIN="$0"
-
 set_globals()
 {
     PROG_BIN="$(abspath "$ORIG_PROG_BIN")"
@@ -14,11 +13,13 @@ set_globals()
     IMAGE_NAMESPACE="c12e"
     IMAGE_NAMESPACE_DEFAULT="c12e"
 # Rancher mangles the name ... grrrr...
-    CONTAINER=r-${HOSTNAME}
-    VOLUME_BUILD_HOME_RW=$(docker inspect $CONTAINER | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
+    CONTAINER=${HOSTNAME}
+    VOLUME_BUILD_HOME_RW=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
+    VOLUME_BUILD_WORKSPACE_VOLUME=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/work")) | .Name')
     VOLUME_BUILD_WORKSPACE="$(pwd)"
     VOLUME_SERVICE_TMP="/tmp"
     DEBUG_LEVEL="0"  # IDEA: actually use DEBUG_LEVEL
+    DOCKERFILE=docker-compose.yml
     USAGE="$PROG_NAME -n JOB_NAME -i JOB_IMAGE_BASE [options]...
     COMMAND ARGS...
 
@@ -69,8 +70,8 @@ Options:
         (default: $IMAGE_NAMESPACE)
 
     -t DOCKER_TAG_ENFORCE
-	ignore the existing tag in docker and republish
-	(default: false)
+        ignore the existing tag in docker and republish
+        (default: false)
     -h
         print this usage information"
 }
@@ -83,31 +84,37 @@ main()
     while getopts n:i:c:s:I:W:t:w:N:pvh f
     do
         case $f in
-            n) JOB_NAME="$(canonical $OPTARG)";;
-            i) JOB_IMAGE_BASE=$OPTARG;;
-            c) CONCERN="$(canonical $OPTARG)";;
-            s) SERVICE_IMAGES="$SERVICE_IMAGES $OPTARG";;
-            I) JOB_ID="$(canonical $OPTARG)";;
+            n) JOB_NAME="$(canonical "${OPTARG}")";;
+            i) JOB_IMAGE_BASE=${OPTARG};;
+            c) CONCERN="$(canonical "${OPTARG}")";;
+            s) SERVICE_IMAGES="${SERVICE_IMAGES} ${OPTARG}";;
+            I) JOB_ID="$(canonical "${OPTARG}")";;
             W) VOLUME_BUILD_HOME_RW="$(abspath "$OPTARG")";;
             t) VOLUME_SERVICE_TMP="$(abspath "$OPTARG")";;
             w) VOLUME_BUILD_WORKSPACE="$(abspath "$OPTARG")";;
-            N) IMAGE_NAMESPACE="$(canonical $OPTARG)";;
+            N) IMAGE_NAMESPACE="$(canonical "$OPTARG")";;
             p) DO_PUBLISH="true";;
-	    t) DOCKER_TAG_ENFORCE="true";;
-            v) DEBUG_LEVEL="$(($DEBUG_LEVEL + 1))";;
+            t) DOCKER_TAG_ENFORCE="true";;
+            v) DEBUG_LEVEL="$((DEBUG_LEVEL + 1))";;
             h) echo "$USAGE"; exit 0;;
             \?) die "missing required argument to switch";;
         esac
     done
-    shift `expr $OPTIND - 1`
+    shift $((OPTIND - 1))
 
     validate_inputs
-    local version="$(version_from_git "$VOLUME_BUILD_WORKSPACE")"
-    local service_dir="$VOLUME_SERVICE_TMP/$JOB_NAME-$JOB_ID"
-    local container_name_prefix="${JOB_NAME}_${CONCERN}_${JOB_ID}"
-    local short_tag="$(make_short_tag "$version" "$CONCERN")"
-    local full_tag="$(make_full_tag "$IMAGE_NAMESPACE" "$JOB_NAME" "$short_tag")"
-    local tag_url_base="$(make_tag_url_base "$IMAGE_NAMESPACE" "$JOB_NAME")"
+    local version
+    version="$(version_from_git "$VOLUME_BUILD_WORKSPACE")"
+    local service_dir
+    service_dir="$VOLUME_SERVICE_TMP/$JOB_NAME-$JOB_ID"
+    local container_name_prefix
+    container_name_prefix="${JOB_NAME}_${CONCERN}_${JOB_ID}"
+    local short_tag
+    short_tag="$(make_short_tag "$version" "$CONCERN")"
+    local full_tag
+    full_tag="$(make_full_tag "$IMAGE_NAMESPACE" "$JOB_NAME" "$short_tag")"
+    local tag_url_base
+    tag_url_base="$(make_tag_url_base "$IMAGE_NAMESPACE" "$JOB_NAME")"
 
     if no_docker_publish "$VOLUME_BUILD_WORKSPACE" "$DO_PUBLISH"
     then
@@ -146,8 +153,9 @@ main()
 
 source_conf()
 {
-    if [ -r "$USER_CONF" ]
-    then . "$USER_CONF"
+    if [ -r "$USER_CONF" ];then
+# shellcheck source=/dev/null
+      source "$USER_CONF"
     fi
 }
 
@@ -196,7 +204,7 @@ make_concern()
 {
   local concern="$1"
   if dev_mode "$concern"
-  then echo "$(whoami)"
+  then whoami
   else echo "$concern"
   fi
 }
@@ -227,7 +235,6 @@ no_docker_publish()
     ! test -r "$workspace/Dockerfile" -a "$do_publish" = true
 }
 
-
 run_ci_job_with_services()
 {
     local service_dir="$1"
@@ -238,14 +245,23 @@ run_ci_job_with_services()
     local job_image_base="$6"
     shift 6
     set_cleanup "$service_dir" "$volume_build_workspace" "$container_name_prefix"
-    link_switches="$(
-        start_services \
-            "$service_dir" "$container_name_prefix" "$service_images")"
+    mv ${DOCKERFILE} ${DOCKERFILE}.prev
+    raw_service_data="$(start_services "$container_name_prefix" "$service_images")"
+    envstring=$(grep -v "^LNK" <<< "$raw_service_data")
+    link_tmp=$(grep "^LNK" <<< "$raw_service_data" | sed -E 's/^.{3}//')
+    links=""
+    [ ! -z "$link_tmp" ] && links=$(cat<<EOF
+  links:
+$link_tmp
+EOF
+)
     run_ci_job \
+        "$service_dir" \
         "$container_name_prefix" \
         "$volume_build_workspace" \
         "$volume_build_home_rw" \
-        "$link_switches" \
+        "$envstring" \
+        "$links" \
         "$job_image_base" \
         "$@"
 }
@@ -257,13 +273,15 @@ not_docker_published()
     local tag_url_base="$1"
     local version_tag="$2"
     url="$tag_url_base/$version_tag"
-    local status="$(
+    local status
+    status="$(
         curl --basic --netrc --silent --include "$url" | head -n 1 | awk '{print $2}')"
-    if [ $status -eq 200 ]
-    then return 1
-    elif [ $status -eq 404 ]
-    then return 0
-    else die "$url returned error: $status"
+    if [ "$status" -eq 200 ]; then
+      return 1
+    elif [ "$status" -eq 404 ]; then
+      return 0
+    else
+       die "$url returned error: $status"
     fi
 }
 
@@ -272,7 +290,7 @@ docker_build()
 {
     local tag="$1"
     local workspace="$2"
-    echo $(docker build --pull=true --force-rm=false --tag "$tag" "$workspace" | tee /dev/stderr | tail -1 | awk '{ print $3 }')
+    docker build --pull=true --force-rm=false --tag "$tag" "$workspace" | tee /dev/stderr | tail -1 | awk '{ print $3 }'
 }
 
 
@@ -294,16 +312,17 @@ tag()
     local image_name="$1"
     local original="$2"
     local concern="$3"
-    local targets="$(make_concern "$concern")-latest latest-$(make_concern "$concern")"
-    if ! dev_mode "$concern"
-    then targets="$targets $original-$concern"
+    local targets
+    targets="$(make_concern "$concern")-latest latest-$(make_concern "$concern")"
+    if ! dev_mode "$concern"; then
+       targets="$targets $original-$concern"
     fi
     for new in $targets
     do
         echo "tagging: $new -> $original"
 # tag force..
-	docker tag -f $image_name:$original $image_name:$new
-	docker push $image_name:$new
+	docker tag -f "$image_name:$original" "$image_name:$new"
+	docker push "$image_name:$new"
     done
 }
 
@@ -319,59 +338,55 @@ set_cleanup()
             trap - INT;
             kill -INT $$;
             sleep 1" \
-        INT KILL TERM
+        INT TERM
 }
 
 
 start_services()
 {
-    local service_dir="$1"
-    local container_name_prefix="$2"
-    shift 2
-    docker run -d --volume=/data --net container:$CONTAINER --name="$container_name_prefix"_data busybox > /dev/null
-    for service_image in $@
-    do start_service "$service_dir" "$container_name_prefix" "$service_image"
+    local container_name_prefix="$1"
+    shift 1 
+    [ ! -z $1 ] && for service_image in "$@"; do
+        start_service "$container_name_prefix" "$service_image"
     done
 }
 
-
 start_service()
 {
-    local service_dir="$1"
-    local container_name_prefix="$2"
-    local service_image="$(expand_image_name "$3")"
-
-    local image_repo_tag="${service_image##*/}"
-    local image_repo="${image_repo_tag%:*}"
-
-    local container_name="${container_name_prefix}_${image_repo}"
-    local log_dir="${service_dir}/${image_repo}/logs"
-    local data_volume="$container_name_prefix"_data
-
-    mkdir -p "$log_dir"
-
-    run_service "$container_name" "$image_repo" "$log_dir" "$data_volume" "$service_image"
-
-    echo --link "$container_name:$image_repo"
+    local container_name_prefix="$1"
+    local service_image
+    service_image="$(expand_image_name "$2")"
+    local image_repo_tag
+    image_repo_tag="${service_image##*/}"
+    local image_repo
+    image_repo="${image_repo_tag%:*}"
+# yuck will need to strip off first line to build links :(
+    echo "LNK   - $image_repo:$image_repo"
+    run_service "$image_repo" "$service_image"
     case "$image_repo" in
         redis)
-            echo --env "REDIS_HOST=$image_repo" --env REDIS_PORT=6379 ;;
+            echo "    - REDIS_HOST=$image_repo"
+            echo "    - REDIS_PORT=6379"
+            ;;
         mongodb)
-            echo --env "MONGO_HOST=$image_repo" --env MONGO_PORT=27017 ;;
+            echo "    - MONGO_HOST=$image_repo"
+            echo "    - MONGO_PORT=27017"
+            ;;
         neo4j)
-            echo --env "NEO4J_HOST=$image_repo" --env NEO4J_PORT=7474 ;;
+            echo "    - NEO4J_HOST=$image_repo"
+            echo "    - NEO4J_PORT=7474"
+            ;;
     esac
 }
 
 wait_until()
 {
     local count=1
-    while ! "$@"
-    do
+    while ! "$@"; do
         sleep 1
-        count="$(($count + 1))"
-        if [ $count -gt 600 ]
-        then die "timed out waiting for service: $@"
+        count="$((count + 1))"
+        if [ $count -gt 600 ]; then
+           die "timed out waiting for service: $*"
         fi
     done
 }
@@ -381,89 +396,84 @@ mongo_up()
 {
     local log_dir="$1"
 # 2.4.x and 3.x messages are different
-    grep -q 'replSet PRIMARY\|primary complete' ${log_dir}/mongodb.log 2> /dev/null
+    grep -q 'replSet PRIMARY\|primary complete' "${log_dir}/mongodb.log" 2> /dev/null
 }
 
 
 run_service()
 {
-    local container_name="$1"
-    local image_repo="$2"
-    local log_dir="$3"
-    local data_container="$4"
-    local service_image="$5"
+    local image_repo="$1"
+    local service_image="$2"
+cat >> $DOCKERFILE <<EOF
+${image_repo}:
+   image: ${service_image}
 
-    docker run \
-        --name "${container_name}" \
-        --net container:$CONTAINER \
-        --detach \
-        $(service_volumes "$image_repo" "$log_dir" "/data") \
-	--volumes-from="$data_container" \
-        "$service_image" \
-        > /dev/null
-    set +x
+EOF
 }
 
 
 run_ci_job()
 {
-    local container_name_prefix="$1"
-    local workspace_dir="$2"
-    local home_rw="$3"
-    local link_switches="$4"
-    local build_image_base="$5"
-    shift 5
+    local service_dir="$1"
+    local container_name_prefix="$2"
+    local workspace_dir="$3"
+    local home_rw="$4"
+    local env_vars="$5"
+    local link_switches="$6"
+    local build_image_base="$7"
+    shift 7
+cat >> $DOCKERFILE <<EOF
+${container_name_prefix}_builder:
+  image: $build_image_base
+  volumes:
+    - ${home_rw}:/root
+    - ${VOLUME_BUILD_WORKSPACE_VOLUME}:/work
+  working_dir: ${workspace_dir}
+  user: root
+  command: "$@"
+  environment:
+    - HOME=/root
+    - USER=root
+$env_vars
+$link_switches
 
-    docker run \
-      --rm \
-      --name "${container_name_prefix}_builder" \
-      --net container:$CONTAINER \
-      --volumes-from=${CONTAINER} \
-      --user root \
-      --env HOME=/root \
-      --env USER=root \
-      --volume "${home_rw}:/root"  \
-      --workdir  ${workspace_dir} \
-      $link_switches \
-      "$build_image_base" \
-      "$@"
+EOF
+
+#docker-compose -f $DOCKERFILE up -d
+# attach to the build job
+#docker attach "${container_name_prefix}_builder"
 }
 
 cleanup()
 {
-    local service_dir="$1"
-    local workspace_dir="$2"
-    local container_name_prefix="$3"
+     local service_dir="$1"
+     local workspace_dir="$2"
+     local container_name_prefix="$3"
 
-    header "cleaning up Docker temporary files"
+     header "cleaning up Docker temporary files"
 
-    rm -r -f "$service_dir"
+     rm -r -f "$service_dir"
 
-    header "cleaning up Docker processes"
+     header "cleaning up Docker processes"
 
-    docker ps --all --no-trunc \
-        | grep "$container_name_prefix" \
-        | awk '{print $1}' \
-        | foreach_do docker rm --force --volumes
+     docker-compose -f $DOCKERFILE stop
+     docker-compose -f $DOCKERFILE rm -v
 
-    docker ps --all --filter "status=exited" --quiet --no-trunc \
-        | foreach_do docker rm --volumes
+     header "cleaning up dangling Docker images"
 
-    header "cleaning up dangling Docker images"
+     docker rmi "$(docker images --filter "dangling=true" --quiet --no-trunc)"
 
-    docker images --filter "dangling=true" --quiet --no-trunc \
-        | foreach_do docker rmi
+     header "cleaning up workspace"
 
-    header "cleaning up workspace"
+     local ownership
+     ownership="$(id -u):$(id -g)"
 
-    local ownership="$(id -u):$(id -g)"
-
-    docker run \
-        --name "${container_name_prefix}_clean_workspace" \
-        --rm \
-        --volume "${workspace_dir}:/workspace" \
-        busybox:latest \
-        chown -R "$ownership" /workspace
+     docker run \
+         --name "${container_name_prefix}_clean_workspace" \
+         --rm \
+         --volume "${workspace_dir}:/workspace" \
+         busybox:latest \
+         chown -R "$ownership" /workspace
 
     header "finished cleanup"
 }
@@ -485,31 +495,6 @@ canonical()
 {
     echo "$@" | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper:]' '[:lower:]'
 }
-
-service_volumes()
-{
-    local image_repo="$1"
-    local host_log_dir="$2"
-    local host_data_dir="$3"
-
-    local container_log_dir="/logs"
-    local container_data_dir="/data"
-
-    # DESIGN: The redis service expects its data volume in a specific
-    # (and non-standard) location
-    #
-    if [ "$image_repo" = "redis" ]
-    then container_data_dir="/data/redis"
-    fi
-
-    echo --volume="${host_log_dir}:${container_log_dir}"
-
-    # DESIGN: https://github.com/docker/docker/issues/4023
-    # Mongo won't fsync on Macs with this volume switch
-    #
-    echo --volume="${host_data_dir}"
-}
-
 
 expand_image_name()
 {
@@ -537,9 +522,10 @@ is_in()
 {
     substring="$1"
     string="$2"
-    if test "${string#*$substring}" != "$string"
-    then return 0
-    else return 1
+    if test "${string#*$substring}" != "$string"; then
+        return 0
+    else
+        return 1
     fi
 }
 
@@ -548,7 +534,7 @@ header()
 {
     echo
     echo "****"
-    echo "**** $@"
+    echo "**** $*"
     echo "****"
     echo
 }
@@ -557,23 +543,15 @@ header()
 abspath()
 {
     local target="$1"
-    local old_pwd="$(pwd)"
+    local old_pwd
+    old_pwd="$(pwd)"
     cd "$(dirname "$target")"
-    while [ -L "$target" ]
-    do
+    while [ -L "$target" ]; do
         target="$(readlink "$target")"
         cd "$(dirname "$target")"
     done
     echo "$(pwd -P)/$(basename "$target")"
     cd "$old_pwd"
-}
-
-
-foreach_do()
-{
-    while read arg
-    do "$@" "$arg"
-    done
 }
 
 

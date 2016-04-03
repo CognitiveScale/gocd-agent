@@ -1,8 +1,6 @@
-consul = "consul.service.consul:8500"
 log_level = "info"
 
 vault {
-  address = "http://consul.service.consul:8200"
 // token is from VAULT_TOKEN env variable..
   renew = true
   ssl {
