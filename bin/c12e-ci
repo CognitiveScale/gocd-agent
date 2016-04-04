@@ -1,4 +1,4 @@
-#!/bin/bash -ux
+#!/bin/bash -eu
 ORIG_PROG_BIN="$0"
 set_globals()
 {
@@ -108,7 +108,7 @@ main()
     local service_dir
     service_dir="$VOLUME_SERVICE_TMP/$JOB_NAME-$JOB_ID"
     local container_name_prefix
-    container_name_prefix="${JOB_NAME}_${CONCERN}_${JOB_ID}"
+    container_name_prefix="${JOB_NAME}${CONCERN}${JOB_ID}"
     local short_tag
     short_tag="$(make_short_tag "$version" "$CONCERN")"
     local full_tag
@@ -245,16 +245,20 @@ run_ci_job_with_services()
     local job_image_base="$6"
     shift 6
     set_cleanup "$service_dir" "$volume_build_workspace" "$container_name_prefix"
-    mv ${DOCKERFILE} ${DOCKERFILE}.prev
-    raw_service_data="$(start_services "$container_name_prefix" "$service_images")"
-    envstring=$(grep -v "^LNK" <<< "$raw_service_data")
-    link_tmp=$(grep "^LNK" <<< "$raw_service_data" | sed -E 's/^.{3}//')
-    links=""
-    [ ! -z "$link_tmp" ] && links=$(cat<<EOF
+    [ -f ${DOCKERFILE} ] && mv ${DOCKERFILE} ${DOCKERFILE}.prev
+    if [ -z "$service_images" ]; then
+       links=""
+       envstring=""
+    else
+    	raw_service_data="$(start_services "$container_name_prefix" "$service_images")"
+    	envstring=$(grep -v "^LNK" <<< "$raw_service_data")
+    	link_tmp=$(grep "^LNK" <<< "$raw_service_data" | sed -E 's/^.{3}//')
+    	links=$(cat<<EOF
   links:
 $link_tmp
 EOF
 )
+    fi
     run_ci_job \
         "$service_dir" \
         "$container_name_prefix" \
@@ -423,7 +427,7 @@ run_ci_job()
     local build_image_base="$7"
     shift 7
 cat >> $DOCKERFILE <<EOF
-${container_name_prefix}_builder:
+builder:
   image: $build_image_base
   volumes:
     - ${home_rw}:/root
@@ -438,10 +442,10 @@ $env_vars
 $link_switches
 
 EOF
-
-#docker-compose -f $DOCKERFILE up -d
-# attach to the build job
-#docker attach "${container_name_prefix}_builder"
+# might need to use a unique name here ..
+docker-compose -p ${container_name_prefix} -f $DOCKERFILE up -d
+# attach to the build job 
+docker attach $(docker ps -q --filter "name=${container_name_prefix}_builder")
 }
 
 cleanup()
@@ -456,12 +460,12 @@ cleanup()
 
      header "cleaning up Docker processes"
 
-     docker-compose -f $DOCKERFILE stop
-     docker-compose -f $DOCKERFILE rm -v
+     docker-compose -p ${container_name_prefix} -f $DOCKERFILE stop 
+     docker-compose -p ${container_name_prefix} -f $DOCKERFILE rm -v -f
 
-     header "cleaning up dangling Docker images"
-
-     docker rmi "$(docker images --filter "dangling=true" --quiet --no-trunc)"
+#     header "cleaning up dangling Docker images"
+#     stopped creating volumes 
+#     docker rmi "$(docker images --filter "dangling=true" --quiet --no-trunc)"
 
      header "cleaning up workspace"
 
