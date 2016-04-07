@@ -5,8 +5,6 @@ vault {
   renew = true
   ssl {
     enabled = false
-//    verify  = false
-//    ca_cert = "/etc/pki/tls/certs/ca-bundle.crt"
   }
 }
 

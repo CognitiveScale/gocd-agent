@@ -27,7 +27,7 @@ get_certs_vault() {
     jq -r .data.certificate /tmp/certs.json > /opt/neo4j/conf/ssl/snakeoil.cert
     rm /tmp/certs.json
 }
-if [ ! -z "${VAULT_ADDR}" ]; then
+if [ ! -z "${HTTPS}" ]; then
   echo "Installing keys from ${CERTS_DIR} to /etc/ssl"
   setup_certs
 
