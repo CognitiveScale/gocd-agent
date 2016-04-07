@@ -1,4 +1,4 @@
-#!/bin/bash -eu
+#!/bin/bash -eux
 ORIG_PROG_BIN="$0"
 set_globals()
 {
@@ -13,7 +13,7 @@ set_globals()
     IMAGE_NAMESPACE="c12e"
     IMAGE_NAMESPACE_DEFAULT="c12e"
 # Rancher mangles the name ... grrrr...
-    CONTAINER=${HOSTNAME}
+    CONTAINER=r-${HOSTNAME}
     VOLUME_BUILD_HOME_RW=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
     VOLUME_BUILD_WORKSPACE_VOLUME=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/work")) | .Name')
     VOLUME_BUILD_WORKSPACE="$(pwd)"
@@ -350,7 +350,7 @@ start_services()
 {
     local container_name_prefix="$1"
     shift 1 
-    [ ! -z $1 ] && for service_image in "$@"; do
+    [ ! -z "$1" ] && for service_image in $@; do
         start_service "$container_name_prefix" "$service_image"
     done
 }
