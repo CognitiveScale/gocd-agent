@@ -14,9 +14,10 @@ set_globals()
     IMAGE_NAMESPACE_DEFAULT="c12e"
 # Rancher mangles the name ... grrrr...
     CONTAINER=r-${HOSTNAME}
-    VOLUME_BUILD_HOME_RW=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
-    VOLUME_BUILD_WORKSPACE_VOLUME=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/work")) | .Name')
+    VOLUME_BUILD_HOME_RW=ROOT #$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
+    VOLUME_BUILD_WORKSPACE_VOLUME=BLAH #$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/work")) | .Name')
     VOLUME_BUILD_WORKSPACE="$(pwd)"
+    EXTERNAL_LINKS=""
     VOLUME_SERVICE_TMP="/tmp"
     DEBUG_LEVEL="0"  # IDEA: actually use DEBUG_LEVEL
     DOCKERFILE=docker-compose.yml
@@ -72,6 +73,10 @@ Options:
     -t DOCKER_TAG_ENFORCE
         ignore the existing tag in docker and republish
         (default: false)
+
+    -x EXTERNAL_LINKS
+        link external EXTERNAL_CONTAINER:LOCALNAME services into the build container
+
     -h
         print this usage information"
 }
@@ -81,13 +86,14 @@ main()
 {
     set_globals
     source_conf
-    while getopts n:i:c:s:I:W:t:w:N:pvh f
+    while getopts n:i:c:s:x:I:W:t:w:N:pvh f
     do
         case $f in
             n) JOB_NAME="$(canonical "${OPTARG}")";;
             i) JOB_IMAGE_BASE=${OPTARG};;
             c) CONCERN="$(canonical "${OPTARG}")";;
             s) SERVICE_IMAGES="${SERVICE_IMAGES} ${OPTARG}";;
+            x) EXTERNAL_LINKS="${EXTERNAL_LINKS} ${OPTARG}";;
             I) JOB_ID="$(canonical "${OPTARG}")";;
             W) VOLUME_BUILD_HOME_RW="$(abspath "$OPTARG")";;
             t) VOLUME_SERVICE_TMP="$(abspath "$OPTARG")";;
@@ -126,6 +132,7 @@ main()
             "$VOLUME_BUILD_WORKSPACE" \
             "$VOLUME_BUILD_HOME_RW" \
             "$JOB_IMAGE_BASE" \
+            "$EXTERNAL_LINKS" \
             "$@"
     else
         if [ ! $DOCKER_TAG_ENFORCE = "true" ] || not_docker_published "$tag_url_base" "$short_tag"
@@ -138,6 +145,7 @@ main()
                 "$VOLUME_BUILD_WORKSPACE" \
                 "$VOLUME_BUILD_HOME_RW" \
                 "$JOB_IMAGE_BASE" \
+                "$EXTERNAL_LINKS" \
                 "$@"
             header "building Docker image"
             image_hash=$(docker_build "$full_tag" "$VOLUME_BUILD_WORKSPACE")
@@ -237,21 +245,22 @@ no_docker_publish()
 
 run_ci_job_with_services()
 {
+  echo $*
     local service_dir="$1"
     local container_name_prefix="$2"
     local service_images="$3"
     local volume_build_workspace="$4"
     local volume_build_home_rw="$5"
     local job_image_base="$6"
-    shift 6
+    local external_service_links="$7"
+    shift 7
     set_cleanup "$service_dir" "$volume_build_workspace" "$container_name_prefix"
     [ -f ${DOCKERFILE} ] && mv ${DOCKERFILE} ${DOCKERFILE}.prev
-    if [ -z "$service_images" ]; then
-       links=""
-       envstring=""
-    else
+    local envstring=""
+    local links=""
+    if [ ! -z "$service_images" ]; then
     	raw_service_data="$(start_services "$container_name_prefix" "$service_images")"
-    	envstring=$(grep -v "^LNK" <<< "$raw_service_data")
+    	envstring=$(grep -v "^LNK" <<< "$raw_service_data"  || echo "")
     	link_tmp=$(grep "^LNK" <<< "$raw_service_data" | sed -E 's/^.{3}//')
     	links=$(cat<<EOF
   links:
@@ -267,6 +276,7 @@ EOF
         "$envstring" \
         "$links" \
         "$job_image_base" \
+        "$external_service_links" \
         "$@"
 }
 
@@ -349,7 +359,7 @@ set_cleanup()
 start_services()
 {
     local container_name_prefix="$1"
-    shift 1 
+    shift 1
     [ ! -z "$1" ] && for service_image in $@; do
         start_service "$container_name_prefix" "$service_image"
     done
@@ -414,8 +424,15 @@ ${image_repo}:
 
 EOF
 }
-
-
+# using extra hosts
+external_service_links() {
+  local links="$1"
+  [ -z "$links" ] && return
+  echo "  extra_hosts:"
+  for l in $links; do
+    echo "    - $l"
+  done
+}
 run_ci_job()
 {
     local service_dir="$1"
@@ -425,7 +442,8 @@ run_ci_job()
     local env_vars="$5"
     local link_switches="$6"
     local build_image_base="$7"
-    shift 7
+    local service_links=$(external_service_links "$8")
+    shift 8
 cat >> $DOCKERFILE <<EOF
 builder:
   image: $build_image_base
@@ -440,12 +458,12 @@ builder:
     - USER=root
 $env_vars
 $link_switches
-
+$service_links
 EOF
 # might need to use a unique name here ..
-docker-compose -p ${container_name_prefix} -f $DOCKERFILE up -d
-# attach to the build job 
-docker attach $(docker ps -q --filter "name=${container_name_prefix}_builder")
+#docker-compose -p ${container_name_prefix} -f $DOCKERFILE up -d
+# attach to the build job
+#docker attach $(docker ps -q --filter "name=${container_name_prefix}_builder")
 }
 
 cleanup()
@@ -460,11 +478,11 @@ cleanup()
 
      header "cleaning up Docker processes"
 
-     docker-compose -p ${container_name_prefix} -f $DOCKERFILE stop 
+     docker-compose -p ${container_name_prefix} -f $DOCKERFILE stop
      docker-compose -p ${container_name_prefix} -f $DOCKERFILE rm -v -f
 
 #     header "cleaning up dangling Docker images"
-#     stopped creating volumes 
+#     stopped creating volumes
 #     docker rmi "$(docker images --filter "dangling=true" --quiet --no-trunc)"
 
      header "cleaning up workspace"
@@ -500,9 +518,17 @@ canonical()
     echo "$@" | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper:]' '[:lower:]'
 }
 
+trim()
+{
+    trimmed=$1
+    trimmed=${trimmed%% }
+    trimmed=${trimmed## }
+    echo "$trimmed"
+}
+
 expand_image_name()
 {
-    local short_name="$1"
+    local short_name=$(trim "$1")
 
     if is_in / "$short_name"
     then local namespace="${short_name%/*}"
