@@ -14,13 +14,13 @@ set_globals()
     IMAGE_NAMESPACE_DEFAULT="c12e"
 # Rancher mangles the name ... grrrr...
     CONTAINER=r-${HOSTNAME}
-    VOLUME_BUILD_HOME_RW=ROOT #$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
-    VOLUME_BUILD_WORKSPACE_VOLUME=BLAH #$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/work")) | .Name')
+    VOLUME_BUILD_HOME_RW=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
+    VOLUME_BUILD_WORKSPACE_VOLUME=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/work")) | .Name')
     VOLUME_BUILD_WORKSPACE="$(pwd)"
     EXTERNAL_LINKS=""
     VOLUME_SERVICE_TMP="/tmp"
     DEBUG_LEVEL="0"  # IDEA: actually use DEBUG_LEVEL
-    DOCKERFILE=docker-compose.yml
+    DOCKERFILE=docker-compose-build.yml
     USAGE="$PROG_NAME -n JOB_NAME -i JOB_IMAGE_BASE [options]...
     COMMAND ARGS...
 
@@ -453,6 +453,8 @@ builder:
   working_dir: ${workspace_dir}
   user: root
   command: "$@"
+  labels:
+    - io.rancher.container.network=true
   environment:
     - HOME=/root
     - USER=root
@@ -461,9 +463,9 @@ $link_switches
 $service_links
 EOF
 # might need to use a unique name here ..
-#docker-compose -p ${container_name_prefix} -f $DOCKERFILE up -d
+docker-compose -p ${container_name_prefix} -f $DOCKERFILE up -d
 # attach to the build job
-#docker attach $(docker ps -q --filter "name=${container_name_prefix}_builder")
+docker attach $(docker-compose -p ${container_name_prefix} -f $DOCKERFILE ps | grep builder | awk '{print $1}')
 }
 
 cleanup()

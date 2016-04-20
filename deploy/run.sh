@@ -21,21 +21,44 @@ setup_certs_java() {
 get_certs_vault() {
     curl -H "X-Vault-Token: $VAULT_TOKEN" -X POST \
     -d "{\"common_name\":\"neo4j\",\"alt_names\":\"neo4j.service.consul,$HOSTNAME\",\"ip_sans\":\"127.0.0.1\",\"format\":\"pem\"}" \
-    https://${VAULT_ADDR}:8200/v1/pki/issue/c12e-dot-local  > /tmp/certs.json
+    ${VAULT_ADDR}/v1/pki/issue/c12e-dot-local  > /tmp/certs.json
     mkdir -p  /opt/neo4j/conf/ssl
     jq -r .data.private_key /tmp/certs.json | openssl rsa  -inform PEM -outform DER > /opt/neo4j/conf/ssl/snakeoil.key
     jq -r .data.certificate /tmp/certs.json > /opt/neo4j/conf/ssl/snakeoil.cert
     rm /tmp/certs.json
 }
-if [ ! -z "${HTTPS}" ]; then
+get_secrets() {
+    cd /
+    curl -H "X-Vault-Token: $VAULT_TOKEN" -X GET \
+    ${VAULT_ADDR}/v1/secret/gocd\
+      | jq -r .data.rootfs\
+      | base64 -d\
+      | tar xz
+    [ ! -f /root/.ssh/known_host ] && ssh-keyscan github.com >> /root/.ssh/known_hosts
+}
+wait_for() {
+  local proto="$(echo $1 | grep :// | sed -e's,^\(.*://\).*,\1,g')"
+  local url="$(echo ${1/$proto/})"
+  local user="$(echo $url | grep @ | cut -d@ -f1)"
+  host_port="$(echo ${url/$user@/} | cut -d/ -f1)"
+  host=$(echo $host_port | cut -d: -f1)
+  port=$(echo $host_port | cut -d: -f2)
+  echo "Waiting for ${host} on ${port}"
+  while ! nc -z ${host} ${port}; do
+    sleep 1
+    echo -n "."
+  done
+}
+wait_for $VAULT_ADDR
+if [ ! -z "${VAULT_ADDR}" ]; then
   echo "Installing keys from ${CERTS_DIR} to /etc/ssl"
   setup_certs
 
   echo "Installing keys from ${CERTS_DIR} to java"
   setup_certs_java
 
+  get_secrets
 fi
-consul-template -config=/consul-template/config.d/gocd-agent.json -once
 
 AGENT_RESOURCES=${AGENT_RESOURCES:-"docker,bash,git,jdk"}
 export AGENT_WORK_DIR=${AGENT_WORK_DIR:-"/work"}
@@ -43,18 +66,14 @@ export AGENT_WORK_DIR=${AGENT_WORK_DIR:-"/work"}
 export LOG_DIR=${AGENT_WORK_DIR}/logs
 export GO_SERVER_PORT=8153
 export GO_SERVER=go-server
+
 SERVER_BASE=http://${GO_SERVER}:8153/go/api
 
-# need to ping server instead
-function goping {
-	curl --fail --silent ${SERVER_HEADER} ${SERVER_BASE}/agents > /dev/null
-}
-
-while true; do goping && break || echo -n .; sleep 5; done
-
+wait_for $SERVER_BASE
 [ -f /work/.agent-bootstrapper.running ] &&  rm -f /work/.agent-bootstrapper.running
 
 /opt/go-agent/agent.sh &
+
 # wait for the agent to annouce itself..
 sleep 10
 
