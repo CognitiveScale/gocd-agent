@@ -517,7 +517,7 @@ die()
 
 canonical()
 {
-    echo "$@" | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper:]' '[:lower:]'
+    echo "$@" | sed 's/[^a-zA-Z0-9-]//g' | tr '[:upper:]' '[:lower:]'
 }
 
 trim()
