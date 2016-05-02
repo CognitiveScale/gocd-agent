@@ -151,11 +151,32 @@ main()
             image_hash=$(docker_build "$full_tag" "$VOLUME_BUILD_WORKSPACE")
             header "publishing Docker image"
             docker_publish "$full_tag" "$short_tag" "$image_hash" "$CONCERN"
+            write_report "$full_tag"
         else
             header "already published to Docker: $short_tag"
         fi
     fi
     header "SUCCESS: finished everything"
+}
+
+write_report()
+{
+  local dockerImage="$1"
+  local gitHash
+  gitHash=$(git rev-parse HEAD)
+  local timestamp
+  timestamp=$(date -u +%FT%TZ)
+  gitLog=$(git log --pretty=format:"- %s%n%b" --since="$(git show -s --format=%ad `git rev-list --tags --max-count=1`)")
+  mkdir -p reports
+echo > reports/buildReport.json <<EOM
+{
+   "name":"$JOB_NAME",
+   "docker_tag":"$dockerImage",
+   "git_hash":"$gitHash",    
+   "timestamp":"$timestamp",
+   "git_log":"$gitLog"
+} 
+EOM
 }
 
 
@@ -166,7 +187,6 @@ source_conf()
       source "$USER_CONF"
     fi
 }
-
 
 validate_inputs()
 {
@@ -197,7 +217,6 @@ make_short_tag()
   else echo "$version"
   fi
 }
-
 
 make_full_tag()
 {
