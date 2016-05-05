@@ -167,7 +167,7 @@ write_report()
   timestamp=$(date -u +%FT%TZ)
   gitLog=$(git log --pretty=format:"- %s%n%b" --since="$(git show -s --format=%ad `git rev-list --tags --max-count=1`)")
   mkdir -p reports
-echo > reports/buildReport.json <<EOM
+cat << EOM > reports/buildReport.json
 {
    "name":"$JOB_NAME",
    "docker_tag":"$dockerImage",
