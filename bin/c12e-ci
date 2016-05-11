@@ -13,8 +13,8 @@ set_globals()
     IMAGE_NAMESPACE="c12e"
     IMAGE_NAMESPACE_DEFAULT="c12e"
     CONTAINER=$(basename $(fgrep 'cpu:/docker/' /proc/self/cgroup) )
-    VOLUME_BUILD_HOME_RW=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/root")) | .Name')
-    VOLUME_BUILD_WORKSPACE_VOLUME=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination | contains("/work")) | .Name')
+    VOLUME_BUILD_HOME_RW=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination  == "/root") | .Name')
+    VOLUME_BUILD_WORKSPACE_VOLUME=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination == "/work") | .Name')
     VOLUME_BUILD_WORKSPACE="$(pwd)"
     EXTERNAL_LINKS=""
     VOLUME_SERVICE_TMP="/tmp"
