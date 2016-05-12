@@ -1,4 +1,4 @@
-#!/bin/bash -eux
+#!/bin/bash -eu
 ORIG_PROG_BIN="$0"
 set_globals()
 {

@@ -76,14 +76,14 @@ wait_for $SERVER_BASE
 
 # wait for the agent to annouce itself..
 sleep 10
-
-UUID=$(curl -s -H 'Accept: application/vnd.go.cd.v2+json' ${SERVER_BASE}/agents |\
+PASS="admin:badger"
+UUID=$(curl -s -u $PASS -H 'Accept: application/vnd.go.cd.v2+json' ${SERVER_BASE}/agents |\
 	 jq -r "._embedded.agents[] | select (.hostname==\"$HOSTNAME\").uuid")
 echo "UUID:" ${UUID}
 
-ACTIVATE="{\"resources\":\"${AGENT_RESOURCES}\",\"agent_config_state\":\"Enabled\"}"
+ACTIVATE="{\"resources\":\"${AGENT_RESOURCES}\",\"agent_config_state\":\"Enabled\",\"envrionments\":[\"Dev\"]}"
 
-curl -i  -H 'Accept: application/vnd.go.cd.v2+json' \
+curl -i  -u $PASS -H 'Accept: application/vnd.go.cd.v2+json' \
 	-H 'Content-Type:application/json' \
 	-X PATCH -d ${ACTIVATE} ${SERVER_BASE}/agents/${UUID}
 
