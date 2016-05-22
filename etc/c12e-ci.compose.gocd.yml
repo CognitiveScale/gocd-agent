@@ -1,0 +1,9 @@
+builder:
+  volumes_from: [ "${C12ECI_CONTAINER}" ]
+  working_dir: ${C12ECI_WORK_DIR}
+  labels:
+    - io.rancher.container.network=true
+  user: root
+  environment:
+    - HOME=/root
+    - USER=root

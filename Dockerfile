@@ -1,7 +1,6 @@
 # Build using: docker build -f Dockerfile.gocd-agent -t gocd-agent .
 FROM docker:1.10.2-dind
 
-
 # version is a mess as the zip doesn't include the build number..
 RUN apk --no-cache add  python py-pip bash unzip openjdk8-jre git curl openssh jq ca-certificates \
 && CONSUL_TEMPLATE_VERSION=0.14.0 \
@@ -20,10 +19,13 @@ RUN apk --no-cache add  python py-pip bash unzip openjdk8-jre git curl openssh j
 && pip install docker-compose \
 && ln -s /opt/${FOLDER_NAME} /opt/go-agent \
 && rm -r /tmp/*
-Add deploy/run.sh /run.sh
-Add bin/ /usr/local/bin/
+
+ADD deploy/run.sh /run.sh
+ADD bin/ /usr/local/bin/
+ADD etc/ /usr/local/etc/
 ENV JAVA_HOME=/usr GO_SERVER=go-server GO_SERVER_PORT=8153
 WORKDIR /tmp
 VOLUME ["/work","/root"]
 STOPSIGNAL HUP
+
 CMD ["/run.sh"]

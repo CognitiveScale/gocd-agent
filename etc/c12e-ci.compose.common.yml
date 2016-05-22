@@ -1,0 +1,5 @@
+mongodb:
+  image: c12e/mongodb:3.2
+
+redis:
+  image: c12e/redis:3.0.5
