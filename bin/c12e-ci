@@ -1,25 +1,23 @@
 #!/bin/bash -eu
+
+
 ORIG_PROG_BIN="$0"
+
+
 set_globals()
 {
     PROG_BIN="$(abspath "$ORIG_PROG_BIN")"
+    PROG_DIR="$(dirname "$PROG_BIN")"
     PROG_NAME="$(basename "$PROG_BIN")"
     USER_CONF="$HOME/.$PROG_NAME"
+    CONFIG_DIR="$(abspath "$PROG_DIR/../etc")"
     CONCERN=""
-    SERVICE_IMAGES=""
     JOB_ID="$$"
     DO_PUBLISH="false"
     DOCKER_TAG_ENFORCE="false"
     IMAGE_NAMESPACE="c12e"
-    IMAGE_NAMESPACE_DEFAULT="c12e"
-    CONTAINER=$(basename $(fgrep 'cpu:/docker/' /proc/self/cgroup) )
-    VOLUME_BUILD_HOME_RW=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination  == "/root") | .Name')
-    VOLUME_BUILD_WORKSPACE_VOLUME=$(docker inspect "${CONTAINER}" | jq -r '.[0].Mounts[] | select(.Destination == "/work") | .Name')
-    VOLUME_BUILD_WORKSPACE="$(pwd)"
-    EXTERNAL_LINKS=""
-    VOLUME_SERVICE_TMP="/tmp"
+    WORKSPACE="$(pwd)"
     DEBUG_LEVEL="0"  # IDEA: actually use DEBUG_LEVEL
-    DOCKERFILE=docker-compose-build.yml
     USAGE="$PROG_NAME -n JOB_NAME -i JOB_IMAGE_BASE [options]...
     COMMAND ARGS...
 
@@ -34,17 +32,10 @@ Required:
         insights, dss, retailsearch, ...
         (used for Docker image/container names)
 
-    -i JOB_IMAGE_BASE
-        Docker image to use when building workspace
-
 Options:
 
     -c CONCERN
         $CONCERN (default), dev, qa, ...
-
-    -s SERVICE_IMAGES
-        Docker dependencies for compiling/testing (like c12e/neo4j:2.2.0);
-        the default namespace is \"c12e\"
 
     -p
         Build and publish Docker images (just run CI job)
@@ -53,15 +44,7 @@ Options:
         unique identification for each job run (like CI build number,
         default is the PID)
 
-    -W VOLUME_BUILD_HOME_RW
-        when building, the volume to mount as root/ for caching
-        (default: $VOLUME_BUILD_HOME_RW)
-
-    -t VOLUME_SERVICE_TMP
-        volume to mount for temporary data of build dependency containers
-        (default: $VOLUME_SERVICE_TMP)
-
-    -w VOLUME_BUILD_WORKSPACE
+    -w WORKSPACE
         when building, the volume to mount as a the build source code root
         (default: current working directory)
 
@@ -69,12 +52,9 @@ Options:
         the Docker namespace to use when building and publishing the artifact
         (default: $IMAGE_NAMESPACE)
 
-    -t DOCKER_TAG_ENFORCE
+    -t
         ignore the existing tag in docker and republish
         (default: false)
-
-    -x EXTERNAL_LINKS
-        link external EXTERNAL_CONTAINER:LOCALNAME services into the build container
 
     -h
         print this usage information"
@@ -85,21 +65,16 @@ main()
 {
     set_globals
     source_conf
-    while getopts n:i:c:s:x:I:W:t:w:N:pvh f
+    while getopts n:c:I:w:N:tpvh f
     do
         case $f in
             n) JOB_NAME="$(canonical "${OPTARG}")";;
-            i) JOB_IMAGE_BASE=${OPTARG};;
             c) CONCERN="$(canonical "${OPTARG}")";;
-            s) SERVICE_IMAGES="${SERVICE_IMAGES} ${OPTARG}";;
-            x) EXTERNAL_LINKS="${EXTERNAL_LINKS} ${OPTARG}";;
             I) JOB_ID="$(canonical "${OPTARG}")";;
-            W) VOLUME_BUILD_HOME_RW="$(abspath "$OPTARG")";;
-            t) VOLUME_SERVICE_TMP="$(abspath "$OPTARG")";;
-            w) VOLUME_BUILD_WORKSPACE="$(abspath "$OPTARG")";;
+            w) WORKSPACE="$(abspath "$OPTARG")";;
             N) IMAGE_NAMESPACE="$(canonical "$OPTARG")";;
-            p) DO_PUBLISH="true";;
             t) DOCKER_TAG_ENFORCE="true";;
+            p) DO_PUBLISH="true";;
             v) DEBUG_LEVEL="$((DEBUG_LEVEL + 1))";;
             h) echo "$USAGE"; exit 0;;
             \?) die "missing required argument to switch";;
@@ -108,92 +83,64 @@ main()
     shift $((OPTIND - 1))
 
     validate_inputs
+
     local version
-    version="$(version_from_git "$VOLUME_BUILD_WORKSPACE")"
-    local service_dir
-    service_dir="$VOLUME_SERVICE_TMP/$JOB_NAME-$JOB_ID"
+    version="$(version_from_git "$WORKSPACE")"
+
     local container_name_prefix
     container_name_prefix="${JOB_NAME}${CONCERN}${JOB_ID}"
+
     local short_tag
     short_tag="$(make_short_tag "$version" "$CONCERN")"
+
     local full_tag
     full_tag="$(make_full_tag "$IMAGE_NAMESPACE" "$JOB_NAME" "$short_tag")"
+
     local tag_url_base
     tag_url_base="$(make_tag_url_base "$IMAGE_NAMESPACE" "$JOB_NAME")"
 
-    if no_docker_publish "$VOLUME_BUILD_WORKSPACE" "$DO_PUBLISH"
+    if no_docker_publish "$WORKSPACE" "$DO_PUBLISH"
     then
         header "running CI job (no Docker image)"
-        run_ci_job_with_services \
-            "$service_dir" \
-            "$container_name_prefix" \
-            "$SERVICE_IMAGES" \
-            "$VOLUME_BUILD_WORKSPACE" \
-            "$VOLUME_BUILD_HOME_RW" \
-            "$JOB_IMAGE_BASE" \
-            "$EXTERNAL_LINKS" \
-            "$@"
+        run_ci_job \
+            "$CONCERN" "$container_name_prefix" "$WORKSPACE" "$CONFIG_DIR"
     else
-        if [ ! $DOCKER_TAG_ENFORCE = "true" ] || not_docker_published "$tag_url_base" "$short_tag"
+        if [ ! $DOCKER_TAG_ENFORCE = "true" ] \
+            || not_docker_published "$tag_url_base" "$short_tag"
         then
             header "running CI job"
-            run_ci_job_with_services \
-                "$service_dir" \
-                "$container_name_prefix" \
-                "$SERVICE_IMAGES" \
-                "$VOLUME_BUILD_WORKSPACE" \
-                "$VOLUME_BUILD_HOME_RW" \
-                "$JOB_IMAGE_BASE" \
-                "$EXTERNAL_LINKS" \
-                "$@"
+            run_ci_job \
+                "$CONCERN" "$container_name_prefix" "$WORKSPACE" "$CONFIG_DIR"
             header "building Docker image"
-            image_hash=$(docker_build "$full_tag" "$VOLUME_BUILD_WORKSPACE")
+            image_hash=$(docker_build "$full_tag" "$WORKSPACE")
             header "publishing Docker image"
-            docker_publish "$full_tag" "$short_tag" "$image_hash" "$CONCERN"
-            write_report "$full_tag"
+            docker_publish \
+                "$full_tag" "$short_tag" "$image_hash" \
+                "$CONCERN" "$IMAGE_NAMESPACE/$JOB_NAME"
+            write_report "$full_tag" "$JOB_NAME" "$WORKSPACE"
         else
             header "already published to Docker: $short_tag"
         fi
     fi
-    header "SUCCESS: finished everything"
-}
 
-write_report()
-{
-  local dockerImage="$1"
-  local gitHash
-  gitHash=$(git rev-parse HEAD)
-  local timestamp
-  timestamp=$(date -u +%FT%TZ)
-  gitLog=$(git log --pretty=format:"- %s%n%b" --since="$(git show -s --format=%ad `git rev-list --tags --max-count=1`)")
-  mkdir -p reports
-cat << EOM > reports/buildReport.json
-{
-   "name":"$JOB_NAME",
-   "docker_tag":"$dockerImage",
-   "git_hash":"$gitHash",    
-   "timestamp":"$timestamp",
-   "git_log":"$gitLog"
-} 
-EOM
+    header "SUCCESS: finished everything"
+
 }
 
 
 source_conf()
 {
-    if [ -r "$USER_CONF" ];then
-# shellcheck source=/dev/null
-      source "$USER_CONF"
+    if [ -r "$USER_CONF" ]
+    then . "$USER_CONF"
     fi
 }
+
 
 validate_inputs()
 {
     set +u
     if [ -z "$JOB_NAME" ]
     then die "MISSING: required job name (-n switch)"
-    elif [ -z "$JOB_IMAGE_BASE" ]
-    then die "MISSING: job image base (-i switch)"
     fi
     set -u
 }
@@ -202,47 +149,28 @@ validate_inputs()
 version_from_git()
 {
     local workspace="$1"
-    git -C "$workspace" describe --long --always --match='v*.*' \
+    git -C "$workspace" describe --long --always --dirty --match='v*.*' \
         | sed 's/v//; s/-/./'
 }
 
 
 make_short_tag()
 {
-  local version="$1"
-  local concern="$2"
-  if dev_mode "$concern"
-  then echo "$version-$(make_concern "$concern")"
-  else echo "$version"
-  fi
+    local version="$1"
+    local concern="$2"
+    if dev_mode "$concern"
+    then echo "$version-$(make_concern "$concern")"
+    else echo "$version"
+    fi
 }
+
 
 make_full_tag()
 {
-  local image_namespace="$1"
-  local job_name="$2"
-  local tag="$3"
-  echo "$image_namespace/$job_name:$tag"
-}
-
-
-make_concern()
-{
-  local concern="$1"
-  if dev_mode "$concern"
-  then whoami
-  else echo "$concern"
-  fi
-}
-
-
-dev_mode()
-{
-  local concern="$1"
-  if [ -n "$concern" ]
-  then return 1
-  else return 0
-  fi
+    local image_namespace="$1"
+    local job_name="$2"
+    local tag="$3"
+    echo "$image_namespace/$job_name:$tag"
 }
 
 
@@ -259,43 +187,6 @@ no_docker_publish()
     local workspace="$1"
     local do_publish="$2"
     ! test -r "$workspace/Dockerfile" -a "$do_publish" = true
-}
-
-run_ci_job_with_services()
-{
-  echo $*
-    local service_dir="$1"
-    local container_name_prefix="$2"
-    local service_images="$3"
-    local volume_build_workspace="$4"
-    local volume_build_home_rw="$5"
-    local job_image_base="$6"
-    local external_service_links="$7"
-    shift 7
-    set_cleanup "$service_dir" "$volume_build_workspace" "$container_name_prefix"
-    [ -f ${DOCKERFILE} ] && mv ${DOCKERFILE} ${DOCKERFILE}.prev
-    local envstring=""
-    local links=""
-    if [ ! -z "$service_images" ]; then
-    	raw_service_data="$(start_services "$container_name_prefix" "$service_images")"
-    	envstring=$(grep -v "^LNK" <<< "$raw_service_data"  || echo "")
-    	link_tmp=$(grep "^LNK" <<< "$raw_service_data" | sed -E 's/^.{3}//')
-    	links=$(cat<<EOF
-  links:
-$link_tmp
-EOF
-)
-    fi
-    run_ci_job \
-        "$service_dir" \
-        "$container_name_prefix" \
-        "$volume_build_workspace" \
-        "$volume_build_home_rw" \
-        "$envstring" \
-        "$links" \
-        "$job_image_base" \
-        "$external_service_links" \
-        "$@"
 }
 
 
@@ -318,11 +209,54 @@ not_docker_published()
 }
 
 
+run_ci_job()
+{
+    local concern="$1"
+    local container_name_prefix="$2"
+    local workspace_dir="$3"
+    local config_dir="$4"
+    local compose_conf_common="$config_dir/c12e-ci.compose.common.yml"
+    local compose_conf_specific
+    compose_conf_specific="$config_dir/$(pick_compose_specific "$concern")"
+    local compose_conf_build="$workspace_dir/c12e-ci.yml"
+    compose_conf_build="$(pick_compose_build "$workspace_dir" "$config_dir")"
+
+    set_cleanup \
+        "$workspace_dir" \
+        "$container_name_prefix" \
+        "$compose_conf_common" \
+        "$compose_conf_specific" \
+        "$compose_conf_build"
+
+    create_nix_data
+
+    local C12ECI_CONTAINER; C12ECI_CONTAINER="$(container_id)"
+    export C12ECI_CONTAINER
+    local C12ECI_WORK_DIR
+    export C12ECI_WORK_DIR="$workspace_dir"
+
+    docker-compose \
+        --project-name "$container_name_prefix" \
+        --file "$compose_conf_common" \
+        --file "$compose_conf_specific" \
+        --file "$compose_conf_build" \
+        run --rm builder
+
+}
+
+
 docker_build()
 {
     local tag="$1"
     local workspace="$2"
-    docker build --pull=true --force-rm=false --tag "$tag" "$workspace" | tee /dev/stderr | tail -1 | awk '{ print $3 }'
+    docker build \
+            --pull=true \
+            --force-rm=false \
+            --tag "$tag" \
+            "$workspace" \
+        | tee /dev/stderr \
+        | tail -1 \
+        | awk '{ print $3 }'
 }
 
 
@@ -332,10 +266,51 @@ docker_publish()
     local short_tag="$2"
     local image_hash="$3"
     local concern="$4"
+    local image_name="$5"
     docker push "$full_tag"
     header "tagging Docker images"
-    tag "$IMAGE_NAMESPACE/$JOB_NAME" "$short_tag" "$concern"
+    tag "$image_name" "$short_tag" "$concern"
     docker rmi -f "$image_hash"
+}
+
+
+write_report()
+{
+    local docker_image="$1"
+    local job_name="$2"
+    local workspace="$3"
+    local target_dir="$workspace/c12e-ci"
+    local gitHash; gitHash="$(git rev-parse HEAD)"
+    local timestamp; timestamp="$(date -u +%FT%TZ)"
+    mkdir -p "$target_dir"
+    cat << EOF > "$target_dir/buildReport.json"
+{
+   "name": "$job_name",
+   "docker_tag": "$docker_image",
+   "git_hash": "$gitHash",
+   "timestamp": "$timestamp"
+}
+EOF
+}
+
+
+make_concern()
+{
+    local concern="$1"
+    if dev_mode "$concern"
+    then whoami
+    else echo "$concern"
+    fi
+}
+
+
+dev_mode()
+{
+    local concern="$1"
+    if [ -n "$concern" ]
+    then return 1
+    else return 0
+    fi
 }
 
 
@@ -352,8 +327,7 @@ tag()
     for new in $targets
     do
         echo "tagging: $new -> $original"
-# tag force..
-	docker tag -f "$image_name:$original" "$image_name:$new"
+	docker tag "$image_name:$original" "$image_name:$new"
 	docker push "$image_name:$new"
     done
 }
@@ -361,161 +335,77 @@ tag()
 
 set_cleanup()
 {
-    local service_dir="$1"
-    local workspace_dir="$2"
-    local container_name_prefix="$3"
-    # DESIGN: http://mywiki.wooledge.org/SignalTrap
-    trap "cleanup $service_dir $workspace_dir $container_name_prefix" EXIT
-    trap "cleanup $service_dir $workspace_dir $container_name_prefix;
-            trap - INT;
-            kill -INT $$;
-            sleep 1" \
-        INT TERM
-}
-
-
-start_services()
-{
-    local container_name_prefix="$1"
-    shift 1
-    [ ! -z "$1" ] && for service_image in $@; do
-        start_service "$container_name_prefix" "$service_image"
-    done
-}
-
-start_service()
-{
-    local container_name_prefix="$1"
-    local service_image
-    service_image="$(expand_image_name "$2")"
-    local image_repo_tag
-    image_repo_tag="${service_image##*/}"
-    local image_repo
-    image_repo="${image_repo_tag%:*}"
-# yuck will need to strip off first line to build links :(
-    echo "LNK   - $image_repo:$image_repo"
-    run_service "$image_repo" "$service_image"
-    case "$image_repo" in
-        redis)
-            echo "    - REDIS_HOST=$image_repo"
-            echo "    - REDIS_PORT=6379"
-            ;;
-        mongodb)
-            echo "    - MONGO_HOST=$image_repo"
-            echo "    - MONGO_PORT=27017"
-            ;;
-        neo4j)
-            echo "    - NEO4J_HOST=$image_repo"
-            echo "    - NEO4J_PORT=7474"
-            ;;
-    esac
-}
-
-wait_until()
-{
-    local count=1
-    while ! "$@"; do
-        sleep 1
-        count="$((count + 1))"
-        if [ $count -gt 600 ]; then
-           die "timed out waiting for service: $*"
-        fi
-    done
-}
-
-
-mongo_up()
-{
-    local log_dir="$1"
-# 2.4.x and 3.x messages are different
-    grep -q 'replSet PRIMARY\|primary complete' "${log_dir}/mongodb.log" 2> /dev/null
-}
-
-
-run_service()
-{
-    local image_repo="$1"
-    local service_image="$2"
-cat >> $DOCKERFILE <<EOF
-${image_repo}:
-   image: ${service_image}
-
-EOF
-}
-# using extra hosts
-external_service_links() {
-  local links="$1"
-  [ -z "$links" ] && return
-  echo "  extra_hosts:"
-  for l in $links; do
-    echo "    - $l"
-  done
-}
-run_ci_job()
-{
-    local service_dir="$1"
+    local workspace_dir="$1"
     local container_name_prefix="$2"
-    local workspace_dir="$3"
-    local home_rw="$4"
-    local env_vars="$5"
-    local link_switches="$6"
-    local build_image_base="$7"
-    local service_links=$(external_service_links "$8")
-    shift 8
-cat >> $DOCKERFILE <<EOF
-builder:
-  image: $build_image_base
-  volumes:
-    - ${home_rw}:/root
-    - ${VOLUME_BUILD_WORKSPACE_VOLUME}:/work
-  working_dir: ${workspace_dir}
-  user: root
-  command: "$@"
-  labels:
-    - io.rancher.container.network=true
-  environment:
-    - HOME=/root
-    - USER=root
-$env_vars
-$link_switches
-$service_links
-EOF
-# might need to use a unique name here ..
-docker-compose -p ${container_name_prefix} -f $DOCKERFILE up -d
-# attach to the build job
-docker attach $(docker-compose -p ${container_name_prefix} -f $DOCKERFILE ps | grep builder | awk '{print $1}')
+    local compose_conf_common="$3"
+    local compose_conf_specific="$4"
+    local compose_conf_build="$5"
+    # DESIGN: http://mywiki.wooledge.org/SignalTrap
+    trap \
+        "cleanup \
+            $workspace_dir \
+            $container_name_prefix \
+            $compose_conf_common \
+            $compose_conf_specific \
+            $compose_conf_build" \
+        EXIT
+    trap \
+        "cleanup \
+            $workspace_dir \
+            $container_name_prefix \
+            $compose_conf_common \
+            $compose_conf_specific \
+            $compose_conf_build ;
+        trap - INT; kill -INT $$; sleep 1" INT TERM
 }
+
 
 cleanup()
 {
-     local service_dir="$1"
-     local workspace_dir="$2"
-     local container_name_prefix="$3"
+    local workspace_dir="$1"
+    local container_name_prefix="$2"
+    local compose_conf_common="$3"
+    local compose_conf_specific="$4"
+    local compose_conf_build="$5"
 
-     header "cleaning up Docker temporary files"
+    header "cleaning up Docker processes"
 
-     rm -r -f "$service_dir"
+    local C12ECI_CONTAINER; C12ECI_CONTAINER="$(container_id)"
+    export C12ECI_CONTAINER
+    local C12ECI_WORK_DIR
+    export C12ECI_WORK_DIR="$workspace_dir"
 
-     header "cleaning up Docker processes"
+    docker-compose \
+        --project-name "$container_name_prefix" \
+        --file "$compose_conf_common" \
+        --file "$compose_conf_specific" \
+        --file "$compose_conf_build" \
+        stop
 
-     docker-compose -p ${container_name_prefix} -f $DOCKERFILE stop
-     docker-compose -p ${container_name_prefix} -f $DOCKERFILE rm -v -f
+    docker-compose \
+        --project-name "$container_name_prefix" \
+        --file "$compose_conf_common" \
+        --file "$compose_conf_specific" \
+        --file "$compose_conf_build" \
+        rm --force -v
 
-#     header "cleaning up dangling Docker images"
-#     stopped creating volumes
-#     docker rmi "$(docker images --filter "dangling=true" --quiet --no-trunc)"
+    header "cleaning up dangling Docker images"
 
-     header "cleaning up workspace"
+    for image in $(docker images --filter "dangling=true" --quiet --no-trunc)
+    do docker rmi $image || true
+    done
 
-     local ownership
-     ownership="$(id -u):$(id -g)"
+    header "cleaning up workspace"
 
-     docker run \
-         --name "${container_name_prefix}_clean_workspace" \
-         --rm \
-         --volume "${workspace_dir}:/workspace" \
-         busybox:latest \
-         chown -R "$ownership" /workspace
+    local ownership
+    ownership="$(id -u):$(id -g)"
+
+    docker run \
+        --name "${container_name_prefix}_clean_workspace" \
+        --rm \
+        --volume "${workspace_dir}:/workspace" \
+        busybox:latest \
+        chown -R "$ownership" /workspace
 
     header "finished cleanup"
 }
@@ -536,47 +426,6 @@ die()
 canonical()
 {
     echo "$@" | sed 's/[^a-zA-Z0-9-]//g' | tr '[:upper:]' '[:lower:]'
-}
-
-trim()
-{
-    trimmed=$1
-    trimmed=${trimmed%% }
-    trimmed=${trimmed## }
-    echo "$trimmed"
-}
-
-expand_image_name()
-{
-    local short_name=$(trim "$1")
-
-    if is_in / "$short_name"
-    then local namespace="${short_name%/*}"
-    else local namespace="$IMAGE_NAMESPACE_DEFAULT"
-    fi
-
-    local image_repo_tag="${short_name##*/}"
-
-    if is_in : "$image_repo_tag"
-    then local tag="${image_repo_tag#*:}"
-    else local tag="latest"
-    fi
-
-    local repo="${image_repo_tag%:*}"
-
-    echo "$namespace/$repo:$tag"
-}
-
-
-is_in()
-{
-    substring="$1"
-    string="$2"
-    if test "${string#*$substring}" != "$string"; then
-        return 0
-    else
-        return 1
-    fi
 }
 
 
@@ -605,9 +454,41 @@ abspath()
 }
 
 
-is_mac()
+container_id()
 {
-    test "$(uname)" = "Darwin"
+    if [ -r /proc/self/cgroup ]
+    then basename "$(egrep '.*\bcpu\b.*:/docker/' /proc/self/cgroup)"
+    fi
+}
+
+
+pick_compose_specific()
+{
+    local concern="$1"
+    if dev_mode "$concern"
+    then echo "c12e-ci.compose.dev.yml"
+    else echo "c12e-ci.compose.gocd.yml"
+    fi
+}
+
+
+pick_compose_build()
+{
+    local workspace="$1"
+    local config_dir="$2"
+    local workspace_config="$workspace/c12e-ci.yml"
+    if [ -r "$workspace_config" ]
+    then echo "$workspace_config"
+    else echo "$config_dir/c12e-ci.compose.noop.yml"
+    fi
+}
+
+
+create_nix_data()
+{
+    if ! docker ps --all --format "{{.Names}}" | grep "^nix-data$"
+    then docker run --name nix-data --entrypoint true c12e/c12e-nix-builder
+    fi
 }
 
 

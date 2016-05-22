@@ -1,0 +1,5 @@
+builder:
+  volumes:
+    - ${C12ECI_WORK_DIR}:/work
+    - /root:/root
+  working_dir: /work
