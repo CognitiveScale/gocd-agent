@@ -279,7 +279,7 @@ write_report()
     local docker_image="$1"
     local job_name="$2"
     local workspace="$3"
-    local target_dir="$workspace/c12e-ci"
+    local target_dir="$workspace/cruise-output"
     local gitHash; gitHash="$(git rev-parse HEAD)"
     local timestamp; timestamp="$(date -u +%FT%TZ)"
     mkdir -p "$target_dir"
@@ -405,7 +405,7 @@ cleanup()
         --rm \
         --volume "${workspace_dir}:/workspace" \
         busybox:latest \
-        chown -R "$ownership" /workspace
+        chown -R "$ownership" /workspace || true
 
     header "finished cleanup"
 }
@@ -487,7 +487,7 @@ pick_compose_build()
 create_nix_data()
 {
     if ! docker ps --all --format "{{.Names}}" | grep "^nix-data$"
-    then docker run --name nix-data --entrypoint true c12e/c12e-nix-builder
+    then docker run --name nix-data --entrypoint true c12e/c12e-nix-builder:0.0.0-g91b10e7
     fi
 }
 
