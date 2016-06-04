@@ -1,14 +1,17 @@
-mongodb:
-  image: c12e/mongodb:3.2
-
 redis:
   image: c12e/redis:3.0.5
 
+mongodb:
+  image: c12e/mongodb:3.2
+
+neo4j:
+  image: c12e/neo4j:2.3.36-g68242fc
+
 builder:
   environment:
-    - NEO4J_HOST=neo4j
-    - NEO4J_PORT=7474
-    - MONGO_HOST=mongodb
-    - MONGO_PORT=27017
     - REDIS_HOST=redis
     - REDIS_PORT=6379
+    - MONGO_HOST=mongodb
+    - MONGO_PORT=27017
+    - NEO4J_HOST=neo4j
+    - NEO4J_PORT=7474
