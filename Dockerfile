@@ -18,7 +18,9 @@ RUN apk --no-cache add  python py-pip bash unzip openjdk8-jre git curl openssh j
 && chmod +x  /opt/${FOLDER_NAME}/agent.sh \
 && pip install docker-compose \
 && ln -s /opt/${FOLDER_NAME} /opt/go-agent \
-&& rm -r /tmp/*
+&& rm -r /tmp/* \
+&& mkdir -p /root/.config/git \
+&& echo "cruise-output/" >> /root/.config/git/ignore
 
 ADD deploy/run.sh /run.sh
 ADD bin/ /usr/local/bin/

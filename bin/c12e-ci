@@ -35,7 +35,7 @@ Required:
 Options:
 
     -c CONCERN
-        $CONCERN (default), dev, qa, ...
+        a tag for the job and Docker image (dev, qa, ...)
 
     -p
         Build and publish Docker images (just run CI job)
@@ -84,39 +84,37 @@ main()
 
     validate_inputs
 
-    local version
-    version="$(version_from_git "$WORKSPACE")"
-
-    local container_name_prefix
-    container_name_prefix="${JOB_NAME}${CONCERN}${JOB_ID}"
-
     local short_tag
-    short_tag="$(make_short_tag "$version" "$CONCERN")"
+    short_tag="$(version_from_git "$WORKSPACE")"
 
     local full_tag
-    full_tag="$(make_full_tag "$IMAGE_NAMESPACE" "$JOB_NAME" "$short_tag")"
+    full_tag="$IMAGE_NAMESPACE/$JOB_NAME:$short_tag"
+
+    local container_name_prefix
+    container_name_prefix="${JOB_NAME}${JOB_ID}"
 
     local tag_url_base
     tag_url_base="$(make_tag_url_base "$IMAGE_NAMESPACE" "$JOB_NAME")"
 
+    local concern
+    concern="$(make_concern "$CONCERN")"
+
     if no_docker_publish "$WORKSPACE" "$DO_PUBLISH"
     then
         header "running CI job (no Docker image)"
-        run_ci_job \
-            "$CONCERN" "$container_name_prefix" "$WORKSPACE" "$CONFIG_DIR"
+        run_ci_job "$container_name_prefix" "$WORKSPACE" "$CONFIG_DIR" "$@"
     else
         if [ ! $DOCKER_TAG_ENFORCE = "true" ] \
             || not_docker_published "$tag_url_base" "$short_tag"
         then
             header "running CI job"
-            run_ci_job \
-                "$CONCERN" "$container_name_prefix" "$WORKSPACE" "$CONFIG_DIR"
+            run_ci_job "$container_name_prefix" "$WORKSPACE" "$CONFIG_DIR" "$@"
             header "building Docker image"
             image_hash=$(docker_build "$full_tag" "$WORKSPACE")
             header "publishing Docker image"
             docker_publish \
                 "$full_tag" "$short_tag" "$image_hash" \
-                "$CONCERN" "$IMAGE_NAMESPACE/$JOB_NAME"
+                "$concern" "$IMAGE_NAMESPACE/$JOB_NAME"
             write_report "$full_tag" "$JOB_NAME" "$WORKSPACE"
         else
             header "already published to Docker: $short_tag"
@@ -154,31 +152,21 @@ version_from_git()
 }
 
 
-make_short_tag()
-{
-    local version="$1"
-    local concern="$2"
-    if dev_mode "$concern"
-    then echo "$version-$(make_concern "$concern")"
-    else echo "$version"
-    fi
-}
-
-
-make_full_tag()
-{
-    local image_namespace="$1"
-    local job_name="$2"
-    local tag="$3"
-    echo "$image_namespace/$job_name:$tag"
-}
-
-
 make_tag_url_base()
 {
     local namespace="$1"
     local job="$2"
     echo "https://registry.hub.docker.com/v1/repositories/$namespace/$job/tags"
+}
+
+
+make_concern()
+{
+    local concern="$1"
+    if [ -n "$concern" ]
+    then echo "$concern"
+    else whoami
+    fi
 }
 
 
@@ -198,7 +186,9 @@ not_docker_published()
     url="$tag_url_base/$version_tag"
     local status
     status="$(
-        curl --basic --netrc --silent --include "$url" | head -n 1 | awk '{print $2}')"
+        curl --basic --netrc --silent --include "$url" \
+            | head -n 1 \
+            | awk '{print $2}')"
     if [ "$status" -eq 200 ]; then
       return 1
     elif [ "$status" -eq 404 ]; then
@@ -211,13 +201,13 @@ not_docker_published()
 
 run_ci_job()
 {
-    local concern="$1"
-    local container_name_prefix="$2"
-    local workspace_dir="$3"
-    local config_dir="$4"
+    local container_name_prefix="$1"
+    local workspace_dir="$2"
+    local config_dir="$3"
+    shift 3
     local compose_conf_common="$config_dir/c12e-ci.compose.common.yml"
     local compose_conf_specific
-    compose_conf_specific="$config_dir/$(pick_compose_specific "$concern")"
+    compose_conf_specific="$config_dir/$(pick_compose_specific)"
     local compose_conf_build="$workspace_dir/c12e-ci.yml"
     compose_conf_build="$(pick_compose_build "$workspace_dir" "$config_dir")"
 
@@ -229,7 +219,7 @@ run_ci_job()
         "$compose_conf_build"
 
     create_nix_data
-    create_dev_home "$concern"
+    create_dev_home
 
     local C12ECI_CONTAINER; C12ECI_CONTAINER="$(container_id)"
     export C12ECI_CONTAINER
@@ -241,7 +231,8 @@ run_ci_job()
         --file "$compose_conf_common" \
         --file "$compose_conf_specific" \
         --file "$compose_conf_build" \
-        run --rm builder
+        run --rm builder \
+        "$@"
 
 }
 
@@ -283,8 +274,10 @@ write_report()
     local target_dir="$workspace/cruise-output"
     local gitHash; gitHash="$(git rev-parse HEAD)"
     local timestamp; timestamp="$(date -u +%FT%TZ)"
-    mkdir -p "$target_dir"
-    cat << EOF > "$target_dir/buildReport.json"
+    if on_ci_server
+    then
+        mkdir -p "$target_dir"
+        cat << EOF > "$target_dir/buildReport.json"
 {
    "name": "$job_name",
    "docker_tag": "$docker_image",
@@ -292,25 +285,65 @@ write_report()
    "timestamp": "$timestamp"
 }
 EOF
-}
-
-
-make_concern()
-{
-    local concern="$1"
-    if dev_mode "$concern"
-    then whoami
-    else echo "$concern"
     fi
 }
 
 
-dev_mode()
+pick_compose_specific()
 {
-    local concern="$1"
-    if [ -n "$concern" ]
-    then return 1
-    else return 0
+    if on_ci_server
+    then echo "c12e-ci.compose.gocd.yml"
+    else echo "c12e-ci.compose.dev.yml"
+    fi
+}
+
+
+pick_compose_build()
+{
+    local workspace="$1"
+    local config_dir="$2"
+    local workspace_config="$workspace/c12e-ci.yml"
+    if [ -r "$workspace_config" ]
+    then echo "$workspace_config"
+    else echo "$config_dir/c12e-ci.compose.noop.yml"
+    fi
+}
+
+
+create_nix_data()
+{
+    local name="nix-data"
+    if ! container_created "$name"
+    then
+        docker run \
+            --name "$name" \
+            --entrypoint true \
+            c12e/c12e-nix-builder:0.0.0-g91b10e7
+    fi
+}
+
+
+create_dev_home()
+{
+    local name="dev-home"
+    if ! (on_ci_server || container_created "$name")
+    then
+        mkdir -p "$HOME/.sbt" "$HOME/.ivy2" "$HOME/.docker"
+        docker run \
+            --name "$name" \
+            --entrypoint /bin/cp \
+            --volume "${HOME}:/mnt" \
+            --volume /root \
+            busybox \
+            -r /mnt/.sbt /mnt/.ivy2 /mnt/.docker /root
+    fi
+}
+
+
+container_id()
+{
+    if [ -r /proc/self/cgroup ]
+    then basename "$(egrep '.*\bcpu\b.*:/docker/' /proc/self/cgroup)"
     fi
 }
 
@@ -320,17 +353,28 @@ tag()
     local image_name="$1"
     local original="$2"
     local concern="$3"
-    local targets
-    targets="$(make_concern "$concern")-latest latest-$(make_concern "$concern")"
-    if ! dev_mode "$concern"; then
-       targets="$targets $original-$concern"
-    fi
-    for new in $targets
+    for new in \
+        "${original}-${concern}" \
+        "${concern}-latest" \
+        "latest-${concern}"
     do
         echo "tagging: $new -> $original"
-	docker tag "$image_name:$original" "$image_name:$new"
-	docker push "$image_name:$new"
+	    docker tag "$image_name:$original" "$image_name:$new"
+	    docker push "$image_name:$new"
     done
+}
+
+
+on_ci_server()
+{
+    test "$(whoami)" = "root"
+}
+
+
+container_created()
+{
+    local name="$1"
+    docker ps --all --format "{{.Names}}" | grep "^${name}$"
 }
 
 
@@ -342,22 +386,14 @@ set_cleanup()
     local compose_conf_specific="$4"
     local compose_conf_build="$5"
     # DESIGN: http://mywiki.wooledge.org/SignalTrap
-    trap \
-        "cleanup \
+    local cmd="cleanup \
             $workspace_dir \
             $container_name_prefix \
             $compose_conf_common \
             $compose_conf_specific \
-            $compose_conf_build" \
-        EXIT
-    trap \
-        "cleanup \
-            $workspace_dir \
-            $container_name_prefix \
-            $compose_conf_common \
-            $compose_conf_specific \
-            $compose_conf_build ;
-        trap - INT; kill -INT $$; sleep 1" INT TERM
+            $compose_conf_build"
+    trap "$cmd" EXIT
+    trap "$cmd; trap - INT; kill -INT $$; sleep 1" INT TERM
 }
 
 
@@ -393,7 +429,7 @@ cleanup()
     header "cleaning up dangling Docker images"
 
     for image in $(docker images --filter "dangling=true" --quiet --no-trunc)
-    do docker rmi $image || true
+    do docker rmi "$image" || true
     done
 
     header "cleaning up workspace"
@@ -452,74 +488,6 @@ abspath()
     done
     echo "$(pwd -P)/$(basename "$target")"
     cd "$old_pwd"
-}
-
-
-container_id()
-{
-    if [ -r /proc/self/cgroup ]
-    then basename "$(egrep '.*\bcpu\b.*:/docker/' /proc/self/cgroup)"
-    fi
-}
-
-
-pick_compose_specific()
-{
-    local concern="$1"
-    if dev_mode "$concern"
-    then echo "c12e-ci.compose.dev.yml"
-    else echo "c12e-ci.compose.gocd.yml"
-    fi
-}
-
-
-pick_compose_build()
-{
-    local workspace="$1"
-    local config_dir="$2"
-    local workspace_config="$workspace/c12e-ci.yml"
-    if [ -r "$workspace_config" ]
-    then echo "$workspace_config"
-    else echo "$config_dir/c12e-ci.compose.noop.yml"
-    fi
-}
-
-
-create_nix_data()
-{
-    local name="nix-data"
-    if ! container_created "$name"
-    then
-        docker run \
-            --name "$name" \
-            --entrypoint true \
-            c12e/c12e-nix-builder:0.0.0-g91b10e7
-    fi
-}
-
-
-create_dev_home()
-{
-    local concern="$1"
-    local name="dev-home"
-    if dev_mode "$concern" && (! container_created "$name")
-    then
-        mkdir -p "$HOME/.sbt" "$HOME/.ivy2" "$HOME/.docker"
-        docker run \
-            --name "$name" \
-            --entrypoint /bin/cp \
-            --volume "${HOME}:/mnt" \
-            --volume /root \
-            busybox \
-            -r /mnt/.sbt /mnt/.ivy2 /mnt/.docker /root
-    fi
-}
-
-
-container_created()
-{
-    local name="$1"
-    docker ps --all --format "{{.Names}}" | grep "^${name}$"
 }
 
 
