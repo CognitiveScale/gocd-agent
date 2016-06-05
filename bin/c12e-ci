@@ -87,20 +87,17 @@ main()
 
     validate_inputs
 
+    local concern
+    concern="$(make_concern "$CONCERN")"
+
     local short_tag
-    short_tag="$(version_from_git "$WORKSPACE")"
-
-    local full_tag
-    full_tag="$IMAGE_NAMESPACE/$JOB_NAME:$short_tag"
-
-    local container_name_prefix
-    container_name_prefix="${JOB_NAME}${JOB_ID}"
+    short_tag="$(make_short_tag "$WORKSPACE" "$concern")"
 
     local tag_url_base
     tag_url_base="$(make_tag_url_base "$IMAGE_NAMESPACE" "$JOB_NAME")"
 
-    local concern
-    concern="$(make_concern "$CONCERN")"
+    local full_tag="$IMAGE_NAMESPACE/$JOB_NAME:$short_tag"
+    local container_name_prefix="${JOB_NAME}${JOB_ID}"
 
     if no_docker_publish "$WORKSPACE" "$DO_PUBLISH"
     then
@@ -147,11 +144,16 @@ validate_inputs()
 }
 
 
-version_from_git()
+make_short_tag()
 {
     local workspace="$1"
-    git -C "$workspace" describe --long --always --dirty --match='v*.*' \
-        | sed 's/v//; s/-/./'
+    local concern="$2"
+    local version
+    version="$(version_from_git "$workspace")"
+    if on_ci_server
+    then echo "$version"
+    else echo "$version-$concern"
+    fi
 }
 
 
@@ -264,7 +266,7 @@ docker_publish()
     local image_name="$5"
     docker push "$full_tag"
     header "tagging Docker images"
-    tag "$image_name" "$short_tag" "$concern"
+    tag_all "$image_name" "$short_tag" "$concern"
     docker rmi -f "$image_hash"
 }
 
@@ -289,6 +291,14 @@ write_report()
 }
 EOF
     fi
+}
+
+
+version_from_git()
+{
+    local workspace="$1"
+    git -C "$workspace" describe --long --always --dirty --match='v*.*' \
+        | sed 's/v//; s/-/./'
 }
 
 
@@ -351,20 +361,28 @@ container_id()
 }
 
 
-tag()
+tag_all()
 {
     local image_name="$1"
     local original="$2"
     local concern="$3"
-    for new in \
-        "${original}-${concern}" \
-        "${concern}-latest" \
-        "latest-${concern}"
-    do
-        echo "tagging: $new -> $original"
-	    docker tag "$image_name:$original" "$image_name:$new"
-	    docker push "$image_name:$new"
+    for new in "${concern}-latest" "latest-${concern}"
+    do tag "$image_name" "$original" "$new"
     done
+    if on_ci_server
+    then tag "$image_name" "$original" "${original}-${concern}"
+    fi
+}
+
+
+tag()
+{
+    local image_name="$1"
+    local original="$2"
+    local new="$3"
+    echo "tagging $image_name: $new -> $original"
+	docker tag "$image_name:$original" "$image_name:$new"
+	docker push "$image_name:$new"
 }
 
 
