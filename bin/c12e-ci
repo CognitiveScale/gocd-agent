@@ -18,13 +18,16 @@ set_globals()
     IMAGE_NAMESPACE="c12e"
     WORKSPACE="$(pwd)"
     DEBUG_LEVEL="0"  # IDEA: actually use DEBUG_LEVEL
-    USAGE="$PROG_NAME -n JOB_NAME -i JOB_IMAGE_BASE [options]...
-    COMMAND ARGS...
+    USAGE="$PROG_NAME -n JOB_NAME [options...] [COMMAND ARGS...]
 
-Run continuous integration jobs.
+Run continuous integration job.
 
-You can set these options in $USER_CONF using
-the argument names documented here.
+A c12e-ci.yml file is normally in the workspace to define how to run the job
+with Docker-compose.  Otherwise, the command is a no-op.  You can override the
+command optionally from the command-line.
+
+You can set these options in $USER_CONF using the argument names
+documented here.
 
 Required:
 
@@ -54,7 +57,7 @@ Options:
 
     -t
         ignore the existing tag in docker and republish
-        (default: false)
+        (default: $DOCKER_TAG_ENFORCE)
 
     -h
         print this usage information"
