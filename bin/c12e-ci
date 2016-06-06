@@ -153,7 +153,11 @@ make_concern()
     local concern="$1"
     if [ -n "$concern" ]
     then echo "$concern"
-    else whoami
+    else
+        if on_ci_server
+        then echo "dev"
+        else whoami
+        fi
     fi
 }
 
