@@ -6,7 +6,6 @@ DOCKER_AUTH_URL="https://auth.docker.io/token?service=registry.docker.io&scope=r
 DOCKER_REGISTRY_URL="https://registry-1.docker.io/v2"
 
 
-
 set_globals()
 {
     PROG_BIN="$(abspath "$ORIG_PROG_BIN")"
@@ -148,6 +147,16 @@ validate_inputs()
 }
 
 
+make_concern()
+{
+    local concern="$1"
+    if [ -n "$concern" ]
+    then echo "$concern"
+    else whoami
+    fi
+}
+
+
 make_short_tag()
 {
     local workspace="$1"
@@ -157,16 +166,6 @@ make_short_tag()
     if on_ci_server
     then echo "$version"
     else echo "$version-$concern"
-    fi
-}
-
-
-make_concern()
-{
-    local concern="$1"
-    if [ -n "$concern" ]
-    then echo "$concern"
-    else whoami
     fi
 }
 
@@ -296,6 +295,39 @@ version_from_git()
 }
 
 
+on_ci_server()
+{
+    test "$(whoami)" = "root"
+}
+
+
+docker_auth()
+{
+    jq \
+            '.auths as $auth
+                | $auth
+                | keys
+                | map(select(contains(".docker.")))[0] as $key
+                | $auth
+                | .[$key].auth' \
+            "$HOME/.docker/config.json" \
+        | xargs echo
+}
+
+
+docker_token()
+{
+    local auth="$1"
+    local namespace="$2"
+    local repo="$3"
+    local headers="Authorization: Basic $auth"
+    local actions="pull"
+    curl -s -H "$headers" "$DOCKER_AUTH_URL:$namespace/$repo:$actions" \
+        | jq '.token' \
+        | xargs echo
+}
+
+
 pick_compose_specific()
 {
     if on_ci_server
@@ -362,15 +394,15 @@ tag_all()
     local original="$3"
     local concern="$4"
     for new in "${concern}-latest" "latest-${concern}"
-    do tag "$namespace" "$repo" "$original" "$new"
+    do tag_one "$namespace" "$repo" "$original" "$new"
     done
     if on_ci_server
-    then tag "$namespace" "$repo" "$original" "${original}-${concern}"
+    then tag_one "$namespace" "$repo" "$original" "${original}-${concern}"
     fi
 }
 
 
-tag()
+tag_one()
 {
     local namespace="$1"
     local repo="$2"
@@ -383,43 +415,10 @@ tag()
 }
 
 
-on_ci_server()
-{
-    test "$(whoami)" = "root"
-}
-
-
 container_created()
 {
     local name="$1"
     docker ps --all --format "{{.Names}}" | grep "^${name}$"
-}
-
-
-docker_token()
-{
-    local auth="$1"
-    local namespace="$2"
-    local repo="$3"
-    local headers="Authorization: Basic $auth"
-    local actions="pull"
-    curl -s -H "$headers" "$DOCKER_AUTH_URL:$namespace/$repo:$actions" \
-        | jq '.token' \
-        | xargs echo
-}
-
-
-docker_auth()
-{
-    jq \
-            '.auths as $auth
-                | $auth
-                | keys
-                | map(select(contains(".docker.")))[0] as $key
-                | $auth
-                | .[$key].auth' \
-            "$HOME/.docker/config.json" \
-        | xargs echo
 }
 
 
