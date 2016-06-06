@@ -2,6 +2,9 @@
 
 
 ORIG_PROG_BIN="$0"
+DOCKER_AUTH_URL="https://auth.docker.io/token?service=registry.docker.io&scope=repository"
+DOCKER_REGISTRY_URL="https://registry-1.docker.io/v2"
+
 
 
 set_globals()
@@ -93,9 +96,6 @@ main()
     local short_tag
     short_tag="$(make_short_tag "$WORKSPACE" "$concern")"
 
-    local tag_url_base
-    tag_url_base="$(make_tag_url_base "$IMAGE_NAMESPACE" "$JOB_NAME")"
-
     local full_tag="$IMAGE_NAMESPACE/$JOB_NAME:$short_tag"
     local container_name_prefix="${JOB_NAME}${JOB_ID}"
 
@@ -104,13 +104,14 @@ main()
         header "running CI job (no Docker image)"
         run_ci_job "$container_name_prefix" "$WORKSPACE" "$CONFIG_DIR" "$@"
     else
-        if [ ! $DOCKER_TAG_ENFORCE = "true" ] \
-            || not_docker_published "$tag_url_base" "$short_tag"
+        if not_docker_published "$IMAGE_NAMESPACE" "$JOB_NAME" "$short_tag" \
+            || test "$DOCKER_TAG_ENFORCE" != false
         then
             header "running CI job"
             run_ci_job "$container_name_prefix" "$WORKSPACE" "$CONFIG_DIR" "$@"
             header "building Docker image"
-            image_hash=$(docker_build "$full_tag" "$WORKSPACE")
+            local image_hash
+            image_hash="$(docker_build "$full_tag" "$WORKSPACE")"
             header "publishing Docker image"
             docker_publish \
                 "$full_tag" "$short_tag" "$image_hash" \
@@ -157,14 +158,6 @@ make_short_tag()
 }
 
 
-make_tag_url_base()
-{
-    local namespace="$1"
-    local job="$2"
-    echo "https://registry.hub.docker.com/v1/repositories/$namespace/$job/tags"
-}
-
-
 make_concern()
 {
     local concern="$1"
@@ -179,28 +172,23 @@ no_docker_publish()
 {
     local workspace="$1"
     local do_publish="$2"
-    ! test -r "$workspace/Dockerfile" -a "$do_publish" = true
+    ! test -r "$workspace/Dockerfile" -a "$do_publish" != false
 }
 
 
 not_docker_published()
 {
-    return 0
-    local tag_url_base="$1"
-    local version_tag="$2"
-    url="$tag_url_base/$version_tag"
-    local status
-    status="$(
-        curl --basic --netrc --silent --include "$url" \
-            | head -n 1 \
-            | awk '{print $2}')"
-    if [ "$status" -eq 200 ]; then
-      return 1
-    elif [ "$status" -eq 404 ]; then
-      return 0
-    else
-       die "$url returned error: $status"
-    fi
+    local namespace="$1"
+    local repo="$2"
+    local version_tag="$3"
+    local auth
+    local token
+    auth="$(docker_auth)"
+    token="$(docker_token "$auth" "$namespace" "$repo")"
+    curl -s -L \
+            -H "Authorization: Bearer $token" \
+            "$DOCKER_REGISTRY_URL/$namespace/$repo/tags/list" \
+        | jq -e ".tags | map(in({\"$version_tag\": true})) | any | not"
 }
 
 
@@ -267,7 +255,7 @@ docker_publish()
     docker push "$full_tag"
     header "tagging Docker images"
     tag_all "$image_name" "$short_tag" "$concern"
-    docker rmi -f "$image_hash"
+    docker rmi --force "$image_hash"
 }
 
 
@@ -399,6 +387,33 @@ container_created()
 }
 
 
+docker_token()
+{
+    local auth="$1"
+    local namespace="$2"
+    local repo="$3"
+    local headers="Authorization: Basic $auth"
+    local actions="pull"
+    curl -s -H "$headers" "$DOCKER_AUTH_URL:$namespace/$repo:$actions" \
+        | jq '.token' \
+        | xargs echo
+}
+
+
+docker_auth()
+{
+    cat "$HOME/.docker/config.json" \
+        | jq \
+            '.auths as $auth
+                | $auth
+                | keys
+                | map(select(contains(".docker.")))[0] as $key
+                | $auth
+                | .[$key].auth' \
+        | xargs echo
+}
+
+
 set_cleanup()
 {
     local workspace_dir="$1"
@@ -469,18 +484,6 @@ cleanup()
 }
 
 
-die()
-{
-    local msg="$1"
-    {
-        echo "$USAGE"
-        echo
-        echo "ERROR: $msg"
-    } > /dev/stderr
-    exit 1
-}
-
-
 canonical()
 {
     echo "$@" | sed 's/[^a-zA-Z0-9-]//g' | tr '[:upper:]' '[:lower:]'
@@ -509,6 +512,18 @@ abspath()
     done
     echo "$(pwd -P)/$(basename "$target")"
     cd "$old_pwd"
+}
+
+
+die()
+{
+    local msg="$1"
+    {
+        echo "$USAGE"
+        echo
+        echo "ERROR: $msg"
+    } > /dev/stderr
+    exit 1
 }
 
 
