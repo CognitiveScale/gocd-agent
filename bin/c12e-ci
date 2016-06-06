@@ -4,6 +4,7 @@
 ORIG_PROG_BIN="$0"
 DOCKER_AUTH_URL="https://auth.docker.io/token?service=registry.docker.io&scope=repository"
 DOCKER_REGISTRY_URL="https://registry-1.docker.io/v2"
+NIX_BUILDER_IMAGE="c12e/c12e-nix-builder:0.0.0-g91b10e7"
 
 
 set_globals()
@@ -357,7 +358,7 @@ create_nix_data()
         docker run \
             --name "$name" \
             --entrypoint true \
-            c12e/c12e-nix-builder:0.0.0-g91b10e7
+            "$NIX_BUILDER_IMAGE"
     fi
 }
 
