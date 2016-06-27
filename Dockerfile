@@ -1,5 +1,5 @@
 # Build using: docker build -f Dockerfile.gocd-agent -t gocd-agent .
-FROM docker:1.10.2-dind
+FROM docker:1.11.2-dind
 
 # version is a mess as the zip doesn't include the build number..
 RUN apk --no-cache add  python py-pip bash unzip openjdk8-jre git curl openssh jq ca-certificates \
@@ -9,7 +9,7 @@ RUN apk --no-cache add  python py-pip bash unzip openjdk8-jre git curl openssh j
 && mv consul-template /usr/local/bin/consul-template \
 && rm consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip \
 && mkdir -p /consul-template /consul-template/config.d /consul-template/templates \
-&& AGNT_VER=16.4.0-3223 \
+&& AGNT_VER=16.6.0-3590 \
 && FOLDER_NAME=go-agent-$(echo $AGNT_VER | cut -d'-' -f1) \
 && curl https://download.go.cd/binaries/${AGNT_VER}/generic/go-agent-${AGNT_VER}.zip  -o /tmp/go-agent.zip \
 && mkdir -p /opt \

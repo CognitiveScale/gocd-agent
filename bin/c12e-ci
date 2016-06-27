@@ -1,6 +1,5 @@
 #!/bin/bash -eu
 
-
 ORIG_PROG_BIN="$0"
 DOCKER_AUTH_URL="https://auth.docker.io/token?service=registry.docker.io&scope=repository"
 DOCKER_REGISTRY_URL="https://registry-1.docker.io/v2"
@@ -192,7 +191,7 @@ not_docker_published()
     local token
     auth="$(docker_auth)"
     token="$(docker_token "$auth" "$namespace" "$repo")"
-    curl -s -L \
+    curl -s -f -L \
             -H "Authorization: Bearer $token" \
             "$DOCKER_REGISTRY_URL/$namespace/$repo/tags/list" \
         | jq -e ".tags | map(in({\"$version_tag\": true})) | any | not"
@@ -327,7 +326,7 @@ docker_token()
     local repo="$3"
     local headers="Authorization: Basic $auth"
     local actions="pull"
-    curl -s -H "$headers" "$DOCKER_AUTH_URL:$namespace/$repo:$actions" \
+    curl -s -f -H "$headers" "$DOCKER_AUTH_URL:$namespace/$repo:$actions" \
         | jq '.token' \
         | xargs echo
 }
@@ -387,7 +386,7 @@ create_dev_home()
 container_id()
 {
     if [ -r /proc/self/cgroup ]
-    then basename "$(egrep '.*\bcpu\b.*:/docker/' /proc/self/cgroup)"
+    then $(basename "$(egrep '.*\bcpu\b.*:/docker/' /proc/self/cgroup)")
     fi
 }
 
@@ -499,7 +498,7 @@ cleanup()
 
 canonical()
 {
-    echo "$@" | sed 's/[^a-zA-Z0-9-]//g' | tr '[:upper:]' '[:lower:]'
+    echo "$@" | sed 's/[^a-zA-Z0-9_-]//g' | tr '[:upper:]' '[:lower:]'
 }
 
 
