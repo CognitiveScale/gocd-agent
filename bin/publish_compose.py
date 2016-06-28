@@ -29,7 +29,10 @@ def get_version_env(services, images):
          if service.startswith(image) }
 
 def get_pipeline_versions(url,artifact,username,password):
-    r=requests.get("{}files/{}/Build/reports/buildReport.json".format(url,artifact),auth=(username,password),verify=False)
+    r=requests.get("{}files/{}/Build/buildReport.json".format(url,artifact),auth=(username,password),verify=False)
+# If the artifact isn't found in the new location try the old one ... 
+    if r.status_code == 404:
+       r=requests.get("{}files/{}/Build/reports/buildReport.json".format(url,artifact),auth=(username,password),verify=False)
     r.raise_for_status()
     str = r.text
     name = re.search("\"name\":\"(.*)\"",str).group(1)
