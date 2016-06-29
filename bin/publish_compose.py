@@ -35,9 +35,9 @@ def get_pipeline_versions(url,artifact,username,password):
        r=requests.get("{}files/{}/Build/reports/buildReport.json".format(url,artifact),auth=(username,password),verify=False)
     r.raise_for_status()
     str = r.text
-    name = re.search("\"name\":\"(.*)\"",str).group(1)
-    image = re.search("\"docker_tag\":\"(.*)\"",str).group(1)
-    timestamp = re.search("\"timestamp\":\"(.*)\"",str).group(1)
+    name = re.search("\"name\":[ ]?\"(.*)\"",str).group(1)
+    image = re.search("\"docker_tag\":[ ]?\"(.*)\"",str).group(1)
+    timestamp = re.search("\"timestamp\":[ ]?\"(.*)\"",str).group(1)
     eprint ("Applying service: {} image: {} built_on: {}".format(name,image,timestamp))
     return {name: { 'image':image}}
 
