@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -eu
 function enc() {
    awk '{printf "%s\\n",$0} END {print ""}' $1
 }
