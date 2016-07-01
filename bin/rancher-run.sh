@@ -1,4 +1,4 @@
-#!/bin/bash -ue
+#!/bin/bash
 function enc() {
    awk '{printf "%s\\n",$0} END {print ""}' $1
 }
@@ -24,11 +24,55 @@ function runCompose() {
   BODY+="\"description\"":"\"Description\""
   BODY+="}"
   echo $BODY
-  RES=$(curl -s -u $RANCHER_API_KEY \
+  if [ -n "$UPGRADE" ]; then
+    RES=$(upgradeEnvironment "$BODY")
+  else
+    RES=$(createEnvironment "$BODY")
+  fi
+  echo $RES
+}
+
+function createEnvironment() {
+  BODY="$1"
+  curl -s -u $RANCHER_API_KEY \
     -H 'Accept: application/json' \
     -H 'Content-Type: application/json' \
-    -X POST -d "$BODY" $RANCHER_URL/v1/environment 2>&1)
-   echo $RES
+    -X POST -d "$BODY" $RANCHER_URL/v1/environment 2>&1
+}
+
+function upgradeEnvironment() {
+  BODY="$1"
+
+  # get upgrade endpoint
+  ENDPOINT_UPGRADE=$(getEnvironmentActionEndpoint "upgrade")
+
+  # perform upgrade
+  curl -s -u $RANCHER_API_KEY \
+    -H 'Accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -X POST -d "$BODY" "$ENDPOINT_UPGRADE" 2>&1
+
+  # wait for upgrade to complete then finish it
+  while true; do
+    ENDPOINT_FINISH=$(getEnvironmentActionEndpoint "finishupgrade")
+    if [ "$ENDPOINT_FINISH" != "null" ]; then
+      curl -s -u $RANCHER_API_KEY \
+        -H 'Accept: application/json' \
+        -H 'Content-Type: application/json' \
+        -X POST "$ENDPOINT_FINISH" 2>&1
+        break
+    fi
+    sleep 5
+  done
+}
+
+function getEnvironmentActionEndpoint() {
+  ACTION="$1"
+  curl -s -u $RANCHER_API_KEY \
+    -H 'Accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -X GET $RANCHER_URL/v1/projects/1a5/environments | \
+    jq -r '.data | map(select(.name=="engage-stage")) | .[].actions.'"$ACTION"
 }
 
 function usage() {
@@ -39,6 +83,7 @@ function usage() {
       --docker_compose <DOCKER_COMPOSE>
       --rancher_compose <RANCHER_COMPOSE>
       --env KEY=value
+      --upgrade
 EOM
   exit 1
 }
@@ -83,6 +128,10 @@ while [ $# -ge 1 ]; do
         ;;
         --env)
           ENVIRONMENT+=" $2"
+          shift
+        ;;
+        --upgrade)
+          UPGRADE=1
           shift
         ;;
         *)
