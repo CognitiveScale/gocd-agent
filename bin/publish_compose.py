@@ -50,12 +50,18 @@ def get_pipeline_versions(url,artifact,username,password):
     eprint ("Applying service: {} image: {} built_on: {}".format(name,image,timestamp))
     return {name: { 'image':image}}
 
-def filter_locators(locators, services):
-    service_images = [services[service]['image'] for service in services]
-    def match(locator):
-        locator_image = get_image_parts(locators[locator].get('image'))
-        return locator_image['image'] in service_images
-    return { locator: locators[locator] for locator in locators if match(locator) }
+def match_locators(locators, services):
+    # match locators and services on image names
+    matched_locators = {}
+    for locator in locators:
+        locator_image_fq = locators[locator].get('image')
+        locator_image = get_image_parts(locator_image_fq).get('image')
+        for service in services:
+            service_image = services[service].get('image')
+            if service_image and service_image == locator_image:
+                matched_locators[service] = { 'image': locator_image_fq }
+                break
+    return matched_locators
 
 def usage():
     eprint("Usage: -s|--source <source> -u|--user <username> -p|--password <password>")
@@ -103,8 +109,8 @@ def main(argv):
     locators={ k: v for d in [ get_pipeline_versions(url,os.environ.get(key),cduser,cdpass)
             for key in os.environ.keys()
                 if key.startswith("GO_DEPENDENCY_LOCATOR_")] for k, v in d.items() }
-    filtered_locators = filter_locators(locators, services)
-    withversions=merge_dict(withstaticversions,filtered_locators)
+    matched_locators = match_locators(locators, services)
+    withversions=merge_dict(withstaticversions, matched_locators)
     print(yaml.safe_dump(withversions,indent=2, default_flow_style=False))
 
 if __name__ == "__main__":
