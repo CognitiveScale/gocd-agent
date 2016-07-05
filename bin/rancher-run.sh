@@ -79,7 +79,7 @@ function getEnvironmentActionEndpoint() {
     -H 'Accept: application/json' \
     -H 'Content-Type: application/json' \
     -X GET $RANCHER_URL/v1/projects/1a5/environments | \
-    jq -r '.data | map(select(.name=="engage-stage")) | .[].actions.'"$ACTION"
+    jq -r '.data | map(select(.name=="'"$STACK_NAME"'")) | .[].actions.'"$ACTION"
 }
 
 function usage() {
