@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 from __future__ import print_function
 import requests, re, sys, json, os, yaml, getopt
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 def load_compose(file):
     with open(file, 'r') as stream:
