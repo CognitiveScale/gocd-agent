@@ -24,12 +24,19 @@ function runCompose() {
   BODY+="\"description\"":"\"Description\""
   BODY+="}"
   echo $BODY
-  if [ -n "$UPGRADE" ]; then
-    RES=$(upgradeEnvironment "$BODY")
-  else
-    RES=$(createEnvironment "$BODY")
+
+  RES=$(createEnvironment "$BODY")
+  STATUS=$(echo "$RES" | jq '.status')
+  if [ "$STATUS" = 422 ]; then
+    if [ -n "$UPGRADE" ]; then
+      RES=$(upgradeEnvironment "$BODY")
+    else
+      echo "$RES"
+      exit 1
+    fi
   fi
-  echo $RES
+
+  echo "$RES"
 }
 
 function createEnvironment() {
