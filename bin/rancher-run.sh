@@ -1,7 +1,10 @@
 #!/bin/bash
+source rancher-tools.sh
+
 function enc() {
    awk '{printf "%s\\n",$0} END {print ""}' $1
 }
+
 function runCompose() {
   TST=$(enc $DOCKER_COMPOSE)
   BODY="{\"dockerCompose\":\"$(enc $DOCKER_COMPOSE)\","
@@ -51,7 +54,7 @@ function upgradeEnvironment() {
   BODY="$1"
 
   # get upgrade endpoint
-  ENDPOINT_UPGRADE=$(getEnvironmentActionEndpoint "upgrade")
+  ENDPOINT_UPGRADE=$(getEnvironmentActionEndpoint "$STACK_NAME" "upgrade")
 
   # perform upgrade
   curl -s -u $RANCHER_API_KEY \
@@ -61,7 +64,7 @@ function upgradeEnvironment() {
 
   # wait for upgrade to complete then finish it
   while true; do
-    ENDPOINT_FINISH=$(getEnvironmentActionEndpoint "finishupgrade")
+    ENDPOINT_FINISH=$(getEnvironmentActionEndpoint "$STACK_NAME" "finishupgrade")
     if [ "$ENDPOINT_FINISH" != "null" ]; then
       curl -s -u $RANCHER_API_KEY \
         -H 'Accept: application/json' \
@@ -71,15 +74,6 @@ function upgradeEnvironment() {
     fi
     sleep 5
   done
-}
-
-function getEnvironmentActionEndpoint() {
-  ACTION="$1"
-  curl -s -u $RANCHER_API_KEY \
-    -H 'Accept: application/json' \
-    -H 'Content-Type: application/json' \
-    -X GET $RANCHER_URL/v1/projects/1a5/environments | \
-    jq -r '.data | map(select(.name=="'"$STACK_NAME"'")) | .[].actions.'"$ACTION"
 }
 
 function usage() {
