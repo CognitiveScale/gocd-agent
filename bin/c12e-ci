@@ -477,7 +477,7 @@ cleanup()
     header "cleaning up dangling Docker images"
 
     for image in $(docker images --filter "dangling=true" --quiet --no-trunc)
-    do docker rmi "$image" || true
+    do docker rmi --force "$image" || true
     done
 
     header "cleaning up workspace"
