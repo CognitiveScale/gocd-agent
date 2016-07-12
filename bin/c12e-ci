@@ -386,7 +386,7 @@ create_dev_home()
 container_id()
 {
     if [ -r /proc/self/cgroup ]
-    then $(basename "$(egrep '.*\bcpu\b.*:/docker/' /proc/self/cgroup)")
+    then basename "$(egrep '.*\bcpu\b.*:/docker/' /proc/self/cgroup)"
     fi
 }
 
