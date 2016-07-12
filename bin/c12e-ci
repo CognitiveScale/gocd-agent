@@ -121,9 +121,8 @@ main()
         else
             header "already published to Docker: $short_tag"
         fi
-        write_report "$namespace" "$repo" "$short_tag" "$workspace"
     fi
-
+    write_report "$namespace" "$repo" "$short_tag" "$workspace"
     header "SUCCESS: finished everything"
 
 }
