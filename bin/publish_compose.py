@@ -40,18 +40,32 @@ def get_version_env(services, images):
      return { service: { 'image': images[image] }  for image in images  for service in services
          if service.startswith(image) }
 
+def print_report_entry(rpt):
+    eprint ("Applying service: {} image: {} built_on: {}".format(rpt['name'],rpt['docker_tag'],rpt['timestamp']))
+
 def get_pipeline_versions(url,artifact,username,password):
     r=requests.get("{}files/{}/Build/buildReport.json".format(url,artifact),auth=(username,password),verify=False)
-# If the artifact isn't found in the new location try the old one ... 
+# If the artifact isn't found in the new location try the old one ...
     if r.status_code == 404:
        r=requests.get("{}files/{}/Build/reports/buildReport.json".format(url,artifact),auth=(username,password),verify=False)
     r.raise_for_status()
     str = r.text
-    name = re.search("\"name\":[ ]?\"(.*)\"",str).group(1)
-    image = re.search("\"docker_tag\":[ ]?\"(.*)\"",str).group(1)
-    timestamp = re.search("\"timestamp\":[ ]?\"(.*)\"",str).group(1)
-    eprint ("Applying service: {} image: {} built_on: {}".format(name,image,timestamp))
-    return {name: { 'image':image}}
+    try:
+        rpt = json.loads(str)
+        if isinstance(rpt,list):
+            for d in rpt:
+               print_report_entry(d)
+            return { d['name']: { 'image': d['docker_tag']} for d in rpt }
+        else:
+            print_report_entry(rpt)
+            return { rpt['name']: { 'image': rpt ['docker_tag'] }}
+    except ValueError as exception:
+# if the document is unparsable JSON try and grep the values out..
+        name = re.search("\"name\":[ ]?\"(.*)\"",str).group(1)
+        image = re.search("\"docker_tag\":[ ]?\"(.*)\"",str).group(1)
+        timestamp = re.search("\"timestamp\":[ ]?\"(.*)\"",str).group(1)
+        eprint ("Applying service: {} image: {} built_on: {}".format(name,image,timestamp))
+        return {name: { 'image':image}}
 
 def match_locators(locators, services):
     # match locators and services on image names
