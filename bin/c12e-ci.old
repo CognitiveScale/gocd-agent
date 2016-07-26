@@ -468,6 +468,10 @@ builder:
   volumes:
     - ${home_rw}:/root
     - ${VOLUME_BUILD_WORKSPACE_VOLUME}:/work
+    - /cs/nas/.stash/gocd/sbt:/root/.sbt
+    - /cs/nas/.stash/gocd/github:/root/.github:ro
+    - /cs/nas/.stash/gocd/ci-automation.pem:/root/.ssh/id_rsa:ro
+    - /cs/nas/.stash/gocd/npmrc:/root/.npmrc:ro
   working_dir: ${workspace_dir}
   user: root
   command: "$@"
