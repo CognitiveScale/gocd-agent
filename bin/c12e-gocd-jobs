@@ -81,7 +81,7 @@ parse_options()
 {
     while getopts c:u:h o
     do
-        case $o in
+        case ${o} in
             c) CONFIG="$OPTARG";;
             u) GITHUB_USER="$OPTARG";;
             h) echo "$USAGE"; exit 0;;
@@ -124,6 +124,7 @@ authenticate()
     local cookie_jar="$4"
     local user="$5"
     get_password "GitHub" "$6"
+    "${PASSWORD:?Need to set PASSWORD non-empty}"
     local github_password="$PASSWORD"
     local token1
     token1="$(get_gocd_auth_token "$gocd_url_auth" "$cookie_jar")"
@@ -247,7 +248,7 @@ install()
     unset OPTIND
     while getopts n:g:o:b: o
     do
-        case $o in
+        case ${o} in
             n) repo_name="$OPTARG";;
             g) group="$OPTARG";;
             o) org="$OPTARG";;
@@ -400,11 +401,11 @@ json_payload()
     create="$6"
     jq --from-file "$jq_filter_file" << EOF
 {
-    "name": "$name",
-    "group": "$group",
-    "git_org": "$git_org",
-    "git_branch": "$git_branch",
-    "create": $create
+    "name": "${name}",
+    "group": "${group}",
+    "git_org": "${git_org}",
+    "git_branch": "${git_branch}",
+    "create": ${create}
 }
 EOF
 }
