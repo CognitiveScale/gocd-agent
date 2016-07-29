@@ -11,8 +11,12 @@ function runRemove() {
     exit 1
   fi
 
+
+  "${RANCHER_API_KEY:?Need to set RANCHER_API_KEY non-empty}"
+  "${BODY:?Need to set BODY non-empty}"
+  
   # perform remove
-  RES=$(curl -s -u $RANCHER_API_KEY \
+  RES=$(curl -s -u ${RANCHER_API_KEY} \
     -H 'Accept: application/json' \
     -H 'Content-Type: application/json' \
     -X POST -d "$BODY" "$ENDPOINT_REMOVE" 2>&1)
@@ -36,7 +40,7 @@ fi
 STACK_NAME=$(basename "$PWD")
 while [ $# -ge 1 ]; do
   key="$1"
-  case $key in
+  case ${key} in
     --host)
       RANCHER_URL="$2"
       shift # past argument
@@ -50,7 +54,7 @@ while [ $# -ge 1 ]; do
       shift
       ;;
     *)
-      echo "[error] Unkown parameter \"$1\""  # unknown option
+      echo "[error] Unknown parameter \"$1\""  # unknown option
       usage
       ;;
   esac
