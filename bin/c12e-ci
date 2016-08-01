@@ -72,7 +72,7 @@ main()
     source_conf
     while getopts n:c:I:w:N:pFvh f
     do
-        case $f in
+        case ${f} in
             n) JOB_NAME="$(canonical "${OPTARG}")";;
             c) CONCERN="$(canonical "${OPTARG}")";;
             I) JOB_ID="$(canonical "${OPTARG}")";;
@@ -280,10 +280,10 @@ write_report()
         mkdir -p "$target_dir"
         cat << EOF > "$target_dir/buildReport.json"
 {
-   "name": "$repo",
-   "docker_tag": "$namespace/$repo:$short_tag",
-   "git_hash": "$gitHash",
-   "timestamp": "$timestamp"
+   "name": "${repo}",
+   "docker_tag": "${namespace}/${repo}:${short_tag}",
+   "git_hash": "${gitHash}",
+   "timestamp": "${timestamp}"
 }
 EOF
     fi
@@ -439,8 +439,8 @@ set_cleanup()
             $compose_conf_common \
             $compose_conf_specific \
             $compose_conf_build"
-    trap "$cmd" EXIT
-    trap "$cmd; trap - INT; kill -INT $$; sleep 1" INT TERM
+    trap "${cmd}" EXIT
+    trap "${cmd}; trap - INT; kill -INT $$; sleep 1" INT TERM
 }
 
 

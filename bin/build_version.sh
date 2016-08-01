@@ -14,14 +14,15 @@ function hget() {
 
 getdval() {
  local TMP=$(grep -m1 "$1" <<< "$2")
- echo $TMP | sed -e "s/^[^:]*:\(.*\)/\1/" -e "s/\"//g" -e "s/,//g"
+ echo ${TMP} | sed -e "s/^[^:]*:\(.*\)/\1/" -e "s/\"//g" -e "s/,//g"
 }
 
 dump_pipe_versions() {
     echo "#Platform-test on: $(date -u +%FT%TZ)"
+    "${GO_DEPENDENCY_LOCATOR:?Need to set GO_DEPENDENCY_LOCATOR non-empty}"
     for K in ${!GO_DEPENDENCY_LOCATOR*}; do
         PJOB=${!K}
-        RPT="$(curl -s --insecure -u "$USER:$PASS" $GO_SERVER_URL/go/files/$PJOB/Build/reports/buildReport.json)"
+        RPT="$(curl -s --insecure -u "$USER:$PASS" ${GO_SERVER_URL}/go/files/${PJOB}/Build/reports/buildReport.json)"
         DOCKER_TAG=$(getdval docker_tag "$RPT")
         SERVICE_NAME=$(getdval name "$RPT")
         TIMESTAMP=$(getdval timestamp "$RPT")
@@ -33,6 +34,7 @@ dump_pipe_versions() {
 }
 
 dump_images_versions() {
+  "${IMAGES:?Need to set IMAGES non-empty}"
   for var in ${!IMAGES@}; do
     echo ""
     echo "${var#IMAGES}:"
@@ -41,26 +43,21 @@ dump_images_versions() {
 }
 
 wait_for() {
-  local proto
-  proto="$(echo "$1" | grep :// | sed -e's,^\(.*://\).*,\1,g')"
-  local url
-  url="${1/$proto/}"
-  local user
-  user="$(echo "$url" | grep @ | cut -d@ -f1)"
-  local host_port
-  host_port="$(echo "${url/$user@/}" | cut -d/ -f1)"
-  local host
-  host=${host_port%:*}
+  local proto="$(echo "$1" | grep :// | sed -e's,^\(.*://\).*,\1,g')"
+  local url="${1/$proto/}"
+  local user="$(echo "$url" | grep @ | cut -d@ -f1)"
+  local host_port="$(echo "${url/$user@/}" | cut -d/ -f1)"
+  local host=${host_port%:*}
   local port="80"
-  [[ $host_port == *":"* ]] && port=${host_port#*:}
+  [[ ${host_port} == *":"* ]] && port=${host_port#*:}
   echo "Waiting for ${host} on ${port}"
   VAL=1
   MAXWAIT=20
   while ! nc -z "${host}" "${port}" &> /dev/null; do
-    sleep $VAL
+    sleep ${VAL}
     echo -n "$VAL"
     VAL=$((VAL+2))
-    if [ $VAL -gt $MAXWAIT ]; then
+    if [ ${VAL} -gt ${MAXWAIT} ]; then
                 echo "Waited for 20 seconds, no response exiting"
                 exit 1
     fi
@@ -78,7 +75,7 @@ set_globals
 while [ $# -ge 1 ]; do
 key="$1"
 
-case $key in
+case ${key} in
     --user)
         USER="$2"
         shift
@@ -98,12 +95,12 @@ case $key in
         shift
     ;;
     *)
-          echo "Unkown parameter \"$1\""    # unknown option
+          echo "Unknown parameter \"$1\""    # unknown option
           usage
       ;;
 esac
 shift # past argument or value
 done
-wait_for $GO_SERVER_URL
+wait_for ${GO_SERVER_URL}
 dump_pipe_versions
 dump_images_versions

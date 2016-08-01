@@ -38,18 +38,18 @@ get_secrets() {
 }
 wait_for() {
   local proto="$(echo $1 | grep :// | sed -e's,^\(.*://\).*,\1,g')"
-  local url="$(echo ${1/$proto/})"
-  local user="$(echo $url | grep @ | cut -d@ -f1)"
-  host_port="$(echo ${url/$user@/} | cut -d/ -f1)"
-  host=$(echo $host_port | cut -d: -f1)
-  port=$(echo $host_port | cut -d: -f2)
+  local url="$(echo ${1/${proto}/})"
+  local user="$(echo ${url} | grep @ | cut -d@ -f1)"
+  host_port="$(echo ${url/${user}@/} | cut -d/ -f1)"
+  host=$(echo ${host_port} | cut -d: -f1)
+  port=$(echo ${host_port} | cut -d: -f2)
   echo "Waiting for ${host} on ${port}"
   while ! nc -z ${host} ${port}; do
     sleep 1
     echo -n "."
   done
 }
-wait_for $VAULT_ADDR
+wait_for ${VAULT_ADDR}
 if [ ! -z "${VAULT_ADDR}" ]; then
   echo "Installing keys from ${CERTS_DIR} to /etc/ssl"
   setup_certs
@@ -69,21 +69,21 @@ export GO_SERVER=go-server
 
 SERVER_BASE=http://${GO_SERVER}:8153/go/api
 
-wait_for $SERVER_BASE
+wait_for ${SERVER_BASE}
 [ -f /work/.agent-bootstrapper.running ] &&  rm -f /work/.agent-bootstrapper.running
 
 /opt/go-agent/agent.sh &
 
-# wait for the agent to annouce itself..
+# wait for the agent to announce itself..
 sleep 10
 PASS="admin:badger"
-UUID=$(curl -s -u $PASS -H 'Accept: application/vnd.go.cd.v2+json' ${SERVER_BASE}/agents |\
+UUID=$(curl -s -u ${PASS} -H 'Accept: application/vnd.go.cd.v2+json' ${SERVER_BASE}/agents |\
 	 jq -r "._embedded.agents[] | select (.hostname==\"$HOSTNAME\").uuid")
 echo "UUID:" ${UUID}
 
-ACTIVATE="{\"resources\":\"${AGENT_RESOURCES}\",\"agent_config_state\":\"Enabled\",\"envrionments\":[\"Dev\"]}"
+ACTIVATE="{\"resources\":\"${AGENT_RESOURCES}\",\"agent_config_state\":\"Enabled\",\"environments\":[\"Dev\"]}"
 
-curl -i  -u $PASS -H 'Accept: application/vnd.go.cd.v2+json' \
+curl -i  -u ${PASS} -H 'Accept: application/vnd.go.cd.v2+json' \
 	-H 'Content-Type:application/json' \
 	-X PATCH -d ${ACTIVATE} ${SERVER_BASE}/agents/${UUID}
 
