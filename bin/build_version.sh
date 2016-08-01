@@ -19,7 +19,7 @@ getdval() {
 
 dump_pipe_versions() {
     echo "#Platform-test on: $(date -u +%FT%TZ)"
-    "${GO_DEPENDENCY_LOCATOR:?Need to set GO_DEPENDENCY_LOCATOR non-empty}"
+    : "${GO_DEPENDENCY_LOCATOR:?Need to set GO_DEPENDENCY_LOCATOR non-empty}"
     for K in ${!GO_DEPENDENCY_LOCATOR*}; do
         PJOB=${!K}
         RPT="$(curl -s --insecure -u "$USER:$PASS" ${GO_SERVER_URL}/go/files/${PJOB}/Build/reports/buildReport.json)"

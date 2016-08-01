@@ -124,7 +124,7 @@ authenticate()
     local cookie_jar="$4"
     local user="$5"
     get_password "GitHub" "$6"
-    "${PASSWORD:?Need to set PASSWORD non-empty}"
+    : "${PASSWORD:?Need to set PASSWORD non-empty}"
     local github_password="$PASSWORD"
     local token1
     token1="$(get_gocd_auth_token "$gocd_url_auth" "$cookie_jar")"
