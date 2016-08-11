@@ -43,11 +43,11 @@ def get_version_env(services, images):
 def print_report_entry(rpt):
     eprint ("Applying service: {} image: {} built_on: {}".format(rpt['name'],rpt['docker_tag'],rpt['timestamp']))
 
-def get_pipeline_versions(url,artifact,username,password):
-    r=requests.get("{}files/{}/Build/buildReport.json".format(url,artifact),auth=(username,password),verify=False)
+def get_pipeline_versions(url,artifact,jobname,username,password):
+    r=requests.get("{}files/{}/{}/buildReport.json".format(url,artifact,jobname),auth=(username,password),verify=False)
 # If the artifact isn't found in the new location try the old one ...
     if r.status_code == 404:
-       r=requests.get("{}files/{}/Build/reports/buildReport.json".format(url,artifact),auth=(username,password),verify=False)
+       r=requests.get("{}files/{}/{}/reports/buildReport.json".format(url,artifact,jobname),auth=(username,password),verify=False)
     r.raise_for_status()
     str = r.text
     try:
@@ -87,7 +87,7 @@ def main(argv):
     source_composefile='docker-compose.yml'
     cduser=os.environ.get('CD_USER')
     cdpass=os.environ.get('CD_PASS')
-
+    jobname="Build"
     try:
         opts, args = getopt.getopt(sys.argv[1:], "hs:vu:p:", ["help", "source=","username=","password="])
     except getopt.GetoptError as err:
@@ -109,6 +109,8 @@ def main(argv):
             cduser = a
         elif o in ("-p", "--password"):
             cdpass = a
+        elif o in ("-j", "--jobname"):
+            jobname = a
         else:
             assert False, "unhandled option"
     # ...
@@ -123,7 +125,7 @@ def main(argv):
     eprint (static_versions)
     withstaticversions=merge_dict(source,static_versions)
     eprint("Pulling versions from parent pipeline(s)")
-    locators={ k: v for d in [ get_pipeline_versions(url,os.environ.get(key),cduser,cdpass)
+    locators={ k: v for d in [ get_pipeline_versions(url,os.environ.get(key),jobname,cduser,cdpass)
             for key in os.environ.keys()
                 if key.startswith("GO_DEPENDENCY_LOCATOR_")] for k, v in d.items() }
     matched_locators = match_locators(locators, services)
