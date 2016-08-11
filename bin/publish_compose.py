@@ -81,7 +81,7 @@ def match_locators(locators, services):
     return matched_locators
 
 def usage():
-    eprint("Usage: -s|--source <source> -u|--user <username> -p|--password <password>")
+    eprint("Usage: -s|--source <source> -j|--jobname <jobname> -u|--user <username> -p|--password <password>")
 def main(argv):
     url=os.environ["GO_SERVER_URL"]
     source_composefile='docker-compose.yml'
@@ -89,7 +89,7 @@ def main(argv):
     cdpass=os.environ.get('CD_PASS')
     jobname="Build"
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hs:vu:p:", ["help", "source=","username=","password="])
+        opts, args = getopt.getopt(sys.argv[1:], "vhs:j:u:p:", ["help", "source=","jobname=","username=","password="])
     except getopt.GetoptError as err:
         # print help information and exit:
         eprint(str(err))  # will print something like "option -a not recognized"
