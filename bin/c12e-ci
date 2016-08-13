@@ -373,9 +373,14 @@ create_dev_home()
         mkdir -p "$HOME/.sbt" "$HOME/.ivy2" "$HOME/.docker" "$HOME/.nixpkgs"
         docker run \
             --name "$name" \
+            --volume /root \
+            busybox
+        docker run \
+            --name "$name-cp" \
+            --rm \
             --entrypoint /bin/cp \
             --volume "${HOME}:/mnt" \
-            --volume /root \
+            --volumes-from "$name" \
             busybox \
             -r /mnt/.sbt /mnt/.ivy2 /mnt/.docker /mnt/.nixpkgs /root
     fi
