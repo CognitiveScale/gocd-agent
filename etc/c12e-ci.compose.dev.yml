@@ -1,5 +1,5 @@
 builder:
-  volumes_from: [ "dev-home" ]
+  volumes_from: [ "dev-home", "nix-data" ]
   volumes:
     - ${C12ECI_WORK_DIR}:/work
   working_dir: /work

@@ -1,5 +1,5 @@
 builder:
-  volumes_from: [ "${C12ECI_CONTAINER}" ]
+  volumes_from: [ "${C12ECI_CONTAINER}", "nix-data" ]
   working_dir: ${C12ECI_WORK_DIR}
   labels:
     - io.rancher.container.network=true
