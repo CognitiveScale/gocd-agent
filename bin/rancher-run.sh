@@ -1,4 +1,4 @@
-#!/bin/bash -eux
+#!/bin/bash -eu
 source ${BASH_SOURCE%/*}/rancher-tools.sh
 
 function enc() {
