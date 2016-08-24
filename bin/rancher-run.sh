@@ -1,5 +1,5 @@
-#!/bin/bash
-source rancher-tools.sh
+#!/bin/bash -eux
+source ${BASH_SOURCE%/*}/rancher-tools.sh
 
 function enc() {
    awk '{printf "%s\\n",$0} END {print ""}' $1
@@ -11,11 +11,11 @@ function runCompose() {
   BODY+="\"name\":\"$STACK_NAME\","
   [[ ! -z "$RANCHER_COMPOSE" ]] && BODY+=\"rancherCompose\":\"$(enc $RANCHER_COMPOSE)\",
   if [ ! -z "$ENVIRONMENT" ]; then
-    echo $ENVIRONMENT
+#    echo $ENVIRONMENT
     len=$(echo $ENVIRONMENT| tr ' ' '\n' | wc -l)
     BODY+="\"environment\":{"
     var=1
-    echo $len
+#    echo $len
     for E in $ENVIRONMENT; do
       BODY+="\"${E%=*}\":\"${E#*=}\""
       [ $var -lt $len ] && BODY+=","
@@ -26,12 +26,12 @@ function runCompose() {
   BODY+="\"startOnCreate\": true,"
   BODY+="\"description\"":"\"Description\""
   BODY+="}"
-  echo $BODY
+#  echo $BODY
 
   RES=$(createEnvironment "$BODY")
   STATUS=$(echo "$RES" | jq '.status')
   if [ "$STATUS" = 422 ]; then
-    if [ -n "$UPGRADE" ]; then
+    if [ -n "${UPGRADE}" ]; then
       RES=$(upgradeEnvironment "$BODY")
     else
       echo "$RES"
@@ -55,7 +55,8 @@ function upgradeEnvironment() {
 
   # get upgrade endpoint
   ENDPOINT_UPGRADE=$(getEnvironmentActionEndpoint "$STACK_NAME" "upgrade")
-
+  echo $ENDPOINT_UPGRADE
+  echo $BODY
   # perform upgrade
   curl -s -u $RANCHER_API_KEY \
     -H 'Accept: application/json' \
@@ -96,6 +97,7 @@ RANCHER_COMPOSE=""
 DOCKER_COMPOSE=""
 ENVIRONMENT=""
 STACK_NAME=$(basename "$PWD")
+UPGRADE=""
 while [ $# -ge 1 ]; do
     key="$1"
     case $key in
@@ -133,7 +135,6 @@ while [ $# -ge 1 ]; do
         ;;
         --upgrade)
           UPGRADE=1
-          shift
         ;;
         *)
           echo "[ERROR] Unkown parameter \"$1\""    # unknown option

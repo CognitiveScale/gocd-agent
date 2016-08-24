@@ -1,6 +1,5 @@
 #!/bin/bash
-
-source rancher-tools.sh
+source ${BASH_SOURCE%/*}/rancher-tools.sh
 
 function runRemove() {
   # get remove endpoint
