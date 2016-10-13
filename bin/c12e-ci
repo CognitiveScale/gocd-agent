@@ -5,7 +5,6 @@ DOCKER_AUTH_URL="https://auth.docker.io/token?service=registry.docker.io&scope=r
 DOCKER_REGISTRY_URL="https://registry-1.docker.io/v2"
 NIX_BUILDER_IMAGE="c12e/c12e-nix-builder:0.0.3-g3f87288"
 
-
 set_globals()
 {
     PROG_BIN="$(abspath "$ORIG_PROG_BIN")"
@@ -464,6 +463,7 @@ cleanup()
     local C12ECI_WORK_DIR
     export C12ECI_WORK_DIR="$workspace_dir"
 
+    header "Stopping build stack"
     docker-compose \
         --project-name "$container_name_prefix" \
         --file "$compose_conf_common" \
@@ -471,6 +471,7 @@ cleanup()
         --file "$compose_conf_build" \
         stop
 
+    header "Removing build stack"
     docker-compose \
         --project-name "$container_name_prefix" \
         --file "$compose_conf_common" \
@@ -480,7 +481,7 @@ cleanup()
 
     header "cleaning up dangling Docker images"
 
-    for image in $(docker images --filter "dangling=true" --quiet --no-trunc)
+    for image in $(docker images --filter "dangling=true" --quiet --no-trunc | grep -v nix-data)
     do docker rmi --force "$image" || true
     done
 
