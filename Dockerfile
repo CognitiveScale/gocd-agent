@@ -3,13 +3,13 @@ FROM docker:1.11.2-dind
 
 # version is a mess as the zip doesn't include the build number..
 RUN apk --no-cache add  python py-pip bash unzip openjdk8-jre git curl openssh jq ca-certificates \
-&& CONSUL_TEMPLATE_VERSION=0.15.0 \
+&& CONSUL_TEMPLATE_VERSION=0.14.0 \
 && wget https://releases.hashicorp.com/consul-template/${CONSUL_TEMPLATE_VERSION}/consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip \
 && unzip consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip \
 && mv consul-template /usr/local/bin/consul-template \
 && rm consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip \
 && mkdir -p /consul-template /consul-template/config.d /consul-template/templates \
-&& AGNT_VER=16.10.0-4131 \
+&& AGNT_VER=16.6.0-3590 \
 && FOLDER_NAME=go-agent-$(echo $AGNT_VER | cut -d'-' -f1) \
 && curl https://download.go.cd/binaries/${AGNT_VER}/generic/go-agent-${AGNT_VER}.zip  -o /tmp/go-agent.zip \
 && mkdir -p /opt \
