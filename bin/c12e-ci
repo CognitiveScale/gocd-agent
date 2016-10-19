@@ -42,7 +42,8 @@ Options:
         a tag for the job and Docker image (dev, qa, ...)
 
     -p
-        Build and publish Docker images (just run CI job)
+        build and publish Docker images (just run CI job)
+        (default: $DOCKER_PUBLISH)
 
     -I JOB_ID
         unique identification for each job run (like CI build number,
