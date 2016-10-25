@@ -4,6 +4,7 @@ ORIG_PROG_BIN="$0"
 DOCKER_AUTH_URL="https://auth.docker.io/token?service=registry.docker.io&scope=repository"
 DOCKER_REGISTRY_URL="https://registry-1.docker.io/v2"
 NIX_BUILDER_IMAGE="c12e/c12e-nix-builder:0.0.3-g3f87288"
+DOCKERFILE="Dockerfile"
 
 set_globals()
 {
@@ -96,33 +97,63 @@ main()
     short_tag="$(make_short_tag "$WORKSPACE" "$concern")"
 
     local namespace="$IMAGE_NAMESPACE"
-    local repo="$JOB_NAME"
+    local repo_base_name="$JOB_NAME"
     local config_dir="$CONFIG_DIR"
     local workspace="$WORKSPACE"
     local container_name_prefix="${JOB_NAME}${JOB_ID}"
 
-    if no_docker_publish "$workspace" "$DOCKER_PUBLISH"
+    local required_work
+    required_work="$(
+        detect_required_work \
+            "$DOCKER_PUBLISH" \
+            "$DOCKER_PUBLISH_FORCE" \
+            "$namespace" \
+            "$short_tag" \
+            "$workspace" \
+            "$repo_base_name")"
+
+    local do_ci_run
+    do_ci_run="$(echo "$required_work" | head -1)"
+
+    local to_publish
+    to_publish="$(echo "$required_work" | tail -n +2)"
+
+    if [ "$do_ci_run" = true ]
     then
-        header "running CI job (no Docker image)"
+        header "running CI job"
         run_ci_job "$container_name_prefix" "$workspace" "$config_dir" "$@"
     else
-        if not_docker_published "$namespace" "$repo" "$short_tag" \
-            || test "$DOCKER_PUBLISH_FORCE" != false
-        then
-            header "running CI job"
-            run_ci_job "$container_name_prefix" "$workspace" "$config_dir" "$@"
+        header "nothing new to publish"
+    fi
+
+    echo "$to_publish" | \
+        while read -r pair
+        do
+            local repo
+            local dockerfile
+            repo="$(echo "$pair" | { IFS=: read -r fst snd; echo "$fst"; })"
+            dockerfile="$(
+                echo "$pair" | { IFS=: read -r fst snd; echo "$snd"; })"
+            if test -z "$repo" || test -z "$dockerfile"
+            then continue
+            fi
             header "building Docker image"
+            local build_path
+            build_path="$(dirname "$dockerfile")"
             local image_hash
             image_hash="$(
-                docker_build "$namespace" "$repo" "$short_tag" "$workspace")"
+                docker_build \
+                    "$namespace" \
+                    "$repo" \
+                    "$short_tag" \
+                    "$dockerfile" \
+                    "$build_path")"
             header "publishing Docker image"
             docker_publish "$namespace" "$repo" "$short_tag" "$concern"
             docker rmi --force "$image_hash"
-        else
-            header "already published to Docker: $short_tag"
-        fi
-    fi
-    write_report "$namespace" "$repo" "$short_tag" "$workspace"
+        done
+
+    write_report "$namespace" "$short_tag" "$workspace" "$to_publish"
     header "SUCCESS: finished everything"
 
 }
@@ -173,11 +204,49 @@ make_short_tag()
 }
 
 
+detect_required_work()
+{
+    local do_docker_publish="$1"
+    local force_docker_publish="$2"
+    local namespace="$3"
+    local short_tag="$4"
+    local workspace="$5"
+    local repo_base_name="$6"
+    local do_ci_run="false"
+    local to_publish=""
+    if no_docker_publish "$workspace" "$do_docker_publish"
+    then
+        do_ci_run="true"
+    else
+        to_publish="$(
+            find "$workspace/" -name "$DOCKERFILE" -type f | {
+                while read -r f
+                do
+                    local repo
+                    repo="$repo_base_name$(dirname "${f#$workspace}" | tr / -)"
+                    repo="$(canonical "${repo%-}")"
+                    if not_docker_published "$namespace" "$repo" "$short_tag" \
+                        || test "$force_docker_publish" != false
+                    then echo "${repo}:${f}"
+                    fi
+                done
+            })"
+    fi
+    if [ -n "$to_publish" ]
+    then do_ci_run="true"
+    fi
+    echo "$do_ci_run"
+    echo "$to_publish"
+}
+
+
 no_docker_publish()
 {
     local workspace="$1"
     local do_publish="$2"
-    ! test -r "$workspace/Dockerfile" -a "$do_publish" != false
+    local files
+    files="$(find "$workspace" -name "$DOCKERFILE" -type f)"
+    test -z "$files" || test "$do_publish" = false
 }
 
 
@@ -190,10 +259,11 @@ not_docker_published()
     local token
     auth="$(docker_auth)"
     token="$(docker_token "$auth" "$namespace" "$repo")"
+    local jq_script=".tags | map(in({\"$version_tag\": true})) | any | not"
     curl -s -f -L \
             -H "Authorization: Bearer $token" \
             "$DOCKER_REGISTRY_URL/$namespace/$repo/tags/list" \
-        | jq -e ".tags | map(in({\"$version_tag\": true})) | any | not"
+        | jq -e "$jq_script" > /dev/null
 }
 
 
@@ -240,12 +310,14 @@ docker_build()
     local namespace="$1"
     local repo="$2"
     local short_tag="$3"
-    local workspace="$4"
+    local dockerfile="$4"
+    local build_path="$5"
     docker build \
+            --file="$dockerfile" \
             --pull=true \
             --force-rm=false \
             --tag "$namespace/$repo:$short_tag" \
-            "$workspace" \
+            "$build_path" \
         | tee /dev/stderr \
         | tail -1 \
         | awk '{ print $3 }'
@@ -269,23 +341,44 @@ docker_publish()
 write_report()
 {
     local namespace="$1"
-    local repo="$2"
-    local short_tag="$3"
-    local workspace="$4"
+    local short_tag="$2"
+    local workspace="$3"
+    local published="$4"
     local target_dir="$workspace/cruise-output"
     local gitHash; gitHash="$(git rev-parse HEAD)"
     local timestamp; timestamp="$(date -u +%FT%TZ)"
+    local printed_first="false"
     if on_ci_server
     then
         mkdir -p "$target_dir"
-        cat << EOF > "$target_dir/buildReport.json"
+        echo "[" >> "$target_dir/buildReport.json"
+        echo "$published" | \
+            while read -r pair
+            do
+                local repo
+                local dockerfile
+                repo="$(
+                    echo "$pair" | { IFS=: read -r fst snd; echo "$fst"; })"
+                dockerfile="$(
+                    echo "$pair" | { IFS=: read -r fst snd; echo "$snd"; })"
+                if test -z "$repo" || test -z "$dockerfile"
+                then continue
+                fi
+                if [ "$printed_first" = "true" ]
+                then echo "," >> "$target_dir/buildReport.json"
+                fi
+                cat << EOF > "$target_dir/buildReport.json"
 {
    "name": "$repo",
+   "docker_file": "$dockerfile",
    "docker_tag": "$namespace/$repo:$short_tag",
    "git_hash": "$gitHash",
    "timestamp": "$timestamp"
 }
 EOF
+                printed_first="true"
+            done
+        echo "]" >> "$target_dir/buildReport.json"
     fi
 }
 
@@ -418,8 +511,8 @@ tag_one()
     local new="$4"
     local image_name="$namespace/$repo"
     echo "tagging $image_name: $new -> $original"
-	docker tag "$image_name:$original" "$image_name:$new"
-	docker push "$image_name:$new"
+    docker tag "$image_name:$original" "$image_name:$new"
+    docker push "$image_name:$new"
 }
 
 
