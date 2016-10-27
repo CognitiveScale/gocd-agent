@@ -575,9 +575,21 @@ cleanup()
 
     header "cleaning up dangling Docker images"
 
-    for image in $(docker images --filter "dangling=true" --quiet --no-trunc | grep -v nix-data)
-    do docker rmi --force "$image" || true
-    done
+    docker images --filter "dangling=true" --quiet --no-trunc \
+        | grep -v nix-data \
+        | \
+            while read -r image
+            do docker rmi --force "$image" || true
+            done
+
+    header "cleaning up dangling Docker volumes"
+
+    docker volume ls -q -f dangling=true \
+        | grep -v volume \
+        | \
+            while read -r volume
+            do docker volume rm "$volume" || true
+            done
 
     header "cleaning up workspace"
 
