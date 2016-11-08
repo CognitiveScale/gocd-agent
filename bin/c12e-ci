@@ -3,7 +3,7 @@
 ORIG_PROG_BIN="$0"
 DOCKER_AUTH_URL="https://auth.docker.io/token?service=registry.docker.io&scope=repository"
 DOCKER_REGISTRY_URL="https://registry-1.docker.io/v2"
-NIX_BUILDER_IMAGE="c12e/c12e-nix-builder:0.0.3-g3f87288"
+NIX_BUILDER_IMAGE="c12e/c12e-nix-builder:0.0.6-g83f2ce9"
 DOCKERFILE="Dockerfile"
 
 set_globals()
