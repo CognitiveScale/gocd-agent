@@ -44,10 +44,10 @@ def print_report_entry(rpt):
     eprint ("Applying service: {} image: {} built_on: {}".format(rpt['name'],rpt['docker_tag'],rpt['timestamp']))
 
 def get_pipeline_versions(url,artifact,jobname,username,password):
-    r=requests.get("{}files/{}/{}/buildReport.json".format(url,artifact,jobname),auth=(username,password),verify=False)
+    r=requests.get("{}/files/{}/{}/buildReport.json".format(url,artifact,jobname),auth=(username,password),verify=False)
 # If the artifact isn't found in the new location try the old one ...
     if r.status_code == 404:
-       r=requests.get("{}files/{}/{}/reports/buildReport.json".format(url,artifact,jobname),auth=(username,password),verify=False)
+       r=requests.get("{}/files/{}/{}/reports/buildReport.json".format(url,artifact,jobname),auth=(username,password),verify=False)
     r.raise_for_status()
     str = r.text
     try:
