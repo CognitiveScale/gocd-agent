@@ -17,6 +17,7 @@ set_globals()
     JOB_ID="$$"
     DOCKER_PUBLISH="false"
     DOCKER_PUBLISH_FORCE="false"
+    DOCKER_PUBLISH_LOCAL="false"
     IMAGE_NAMESPACE="c12e"
     WORKSPACE="$(pwd)"
     DEBUG_LEVEL="0"  # IDEA: actually use DEBUG_LEVEL
@@ -45,6 +46,9 @@ Options:
     -p
         build and publish Docker images (just run CI job)
         (default: $DOCKER_PUBLISH)
+    -l
+        build locally, but don't push (overrides -p and -F)
+        (default: $DOCKER_PUBLISH_LOCAL)
 
     -I JOB_ID
         unique identification for each job run (like CI build number,
@@ -71,7 +75,7 @@ main()
 {
     set_globals
     source_conf
-    while getopts n:c:I:w:N:pFvh f
+    while getopts n:c:I:w:N:pFlvh f
     do
         case $f in
             n) JOB_NAME="$(canonical "${OPTARG}")";;
@@ -81,6 +85,9 @@ main()
             N) IMAGE_NAMESPACE="$(canonical "$OPTARG")";;
             p) DOCKER_PUBLISH="true";;
             F) DOCKER_PUBLISH_FORCE="true";;
+            l) DOCKER_PUBLISH_LOCAL="true"
+               DOCKER_PUBLISH="true"
+               DOCKER_PUBLISH_FORCE="true";;
             v) DEBUG_LEVEL="$((DEBUG_LEVEL + 1))";;
             h) echo "$USAGE"; exit 0;;
             \?) die "missing required argument to switch";;
@@ -94,7 +101,7 @@ main()
     concern="$(make_concern "$CONCERN")"
 
     local short_tag
-    short_tag="$(make_short_tag "$WORKSPACE" "$concern")"
+    short_tag="$(make_short_tag "$WORKSPACE" "$concern" "$DOCKER_PUBLISH_LOCAL")"
 
     local namespace="$IMAGE_NAMESPACE"
     local repo_base_name="$JOB_NAME"
@@ -148,9 +155,12 @@ main()
                     "$short_tag" \
                     "$dockerfile" \
                     "$build_path")"
-            header "publishing Docker image"
-            docker_publish "$namespace" "$repo" "$short_tag" "$concern"
-            docker rmi --force "$image_hash"
+            if [ "$DOCKER_PUBLISH_LOCAL" = false ]
+            then
+                header "publishing Docker image"
+                docker_publish "$namespace" "$repo" "$short_tag" "$concern"
+                docker rmi --force "$image_hash"
+            fi
         done
 
     write_report "$namespace" "$short_tag" "$workspace" "$to_publish"
@@ -195,9 +205,10 @@ make_short_tag()
 {
     local workspace="$1"
     local concern="$2"
+    local publish_local="$3"
     local version
     version="$(version_from_git "$workspace")"
-    if on_ci_server
+    if on_ci_server || test "$publish_local" = "true"
     then echo "$version"
     else echo "$version-$concern"
     fi
