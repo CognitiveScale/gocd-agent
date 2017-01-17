@@ -493,9 +493,7 @@ tag_all()
     local repo="$2"
     local original="$3"
     local concern="$4"
-    for new in "${concern}-latest" "latest-${concern}"
-    do tag_one "$namespace" "$repo" "$original" "$new"
-    done
+    tag_one "$namespace" "$repo" "$original" "latest-$concern"
     if on_ci_server
     then tag_one "$namespace" "$repo" "$original" "${original}-${concern}"
     fi
