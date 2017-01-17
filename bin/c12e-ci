@@ -115,8 +115,6 @@ main()
     local to_publish
     to_publish="$(echo "$required_work" | tail -n +2)"
 
-    echo "DEBUG: SHAJRA: TO PUBLISH: $to_publish"
-
     if [ "$do_ci_run" = true ]
     then
         header "running CI job"
