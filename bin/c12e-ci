@@ -4,7 +4,6 @@ ORIG_PROG_BIN="$0"
 DOCKER_AUTH_URL="https://auth.docker.io/token?service=registry.docker.io&scope=repository"
 DOCKER_REGISTRY_URL="https://registry-1.docker.io/v2"
 NIX_BUILDER_IMAGE="c12e/c12e-nix-builder:0.0.6-g83f2ce9"
-DOCKERFILE="Dockerfile"
 
 set_globals()
 {
@@ -115,6 +114,8 @@ main()
 
     local to_publish
     to_publish="$(echo "$required_work" | tail -n +2)"
+
+    echo "DEBUG: SHAJRA: TO PUBLISH: $to_publish"
 
     if [ "$do_ci_run" = true ]
     then
@@ -244,7 +245,7 @@ no_docker_publish()
     local workspace="$1"
     local do_publish="$2"
     local files
-    files="$(find "$workspace" -name "$DOCKERFILE" -type f)"
+    files="$(find "$workspace/" -name 'Dockerfile.c12e-ci.*' -type f)"
     test -z "$files" || test "$do_publish" = false
 }
 
