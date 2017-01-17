@@ -21,7 +21,7 @@ set_globals()
     IMAGE_NAMESPACE="c12e"
     WORKSPACE="$(pwd)"
     DEBUG_LEVEL="0"  # IDEA: actually use DEBUG_LEVEL
-    USAGE="$PROG_NAME -n JOB_NAME [options...] [COMMAND ARGS...]
+    USAGE="$PROG_NAME [options...] [COMMAND ARGS...]
 
 Run continuous integration job.
 
@@ -31,12 +31,6 @@ command optionally from the command-line.
 
 You can set these options in $USER_CONF using the argument names
 documented here.
-
-Required:
-
-    -n JOB_NAME
-        insights, dss, retailsearch, ...
-        (used for Docker image/container names)
 
 Options:
 
@@ -75,10 +69,9 @@ main()
 {
     set_globals
     source_conf
-    while getopts n:c:I:w:N:pFlvh f
+    while getopts c:I:w:N:pFlvh f
     do
         case $f in
-            n) JOB_NAME="$(canonical "${OPTARG}")";;
             c) CONCERN="$(canonical "${OPTARG}")";;
             I) JOB_ID="$(canonical "${OPTARG}")";;
             w) WORKSPACE="$(abspath "$OPTARG")";;
@@ -104,10 +97,9 @@ main()
     short_tag="$(make_short_tag "$WORKSPACE" "$concern" "$DOCKER_PUBLISH_LOCAL")"
 
     local namespace="$IMAGE_NAMESPACE"
-    local repo_base_name="$JOB_NAME"
     local config_dir="$CONFIG_DIR"
     local workspace="$WORKSPACE"
-    local container_name_prefix="${JOB_NAME}${JOB_ID}"
+    local container_name_prefix="${JOB_ID}"
 
     local required_work
     required_work="$(
@@ -116,8 +108,7 @@ main()
             "$DOCKER_PUBLISH_FORCE" \
             "$namespace" \
             "$short_tag" \
-            "$workspace" \
-            "$repo_base_name")"
+            "$workspace")"
 
     local do_ci_run
     do_ci_run="$(echo "$required_work" | head -1)"
@@ -180,9 +171,6 @@ source_conf()
 validate_inputs()
 {
     set +u
-    if [ -z "$JOB_NAME" ]
-    then die "MISSING: required job name (-n switch)"
-    fi
     set -u
 }
 
@@ -222,7 +210,6 @@ detect_required_work()
     local namespace="$3"
     local short_tag="$4"
     local workspace="$5"
-    local repo_base_name="$6"
     local do_ci_run="false"
     local to_publish=""
     if no_docker_publish "$workspace" "$do_docker_publish"
@@ -230,12 +217,13 @@ detect_required_work()
         do_ci_run="true"
     else
         to_publish="$(
-            find "$workspace/" -name "$DOCKERFILE" -type f | {
+            find "$workspace/" -name 'Dockerfile.c12e-ci.*' -type f | {
                 while read -r f
                 do
                     local repo
-                    repo="$repo_base_name$(dirname "${f#$workspace}" | tr / -)"
-                    repo="$(canonical "${repo%-}")"
+                    repo="$(basename "$f")"
+                    repo="${repo#Dockerfile.c12e-ci.}"
+                    repo="$(canonical "$repo")"
                     if not_docker_published "$namespace" "$repo" "$short_tag" \
                         || test "$force_docker_publish" != false
                     then echo "${repo}:${f}"
