@@ -9,9 +9,9 @@ RUN apk --no-cache add  python py-pip bash unzip openjdk8-jre git curl openssh j
 && mv consul-template /usr/local/bin/consul-template \
 && rm consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip \
 && mkdir -p /consul-template /consul-template/config.d /consul-template/templates \
-&& AGNT_VER=16.6.0-3590 \
+&& AGNT_VER=16.10.0-4131 \
 && FOLDER_NAME=go-agent-$(echo $AGNT_VER | cut -d'-' -f1) \
-&& curl https://download.go.cd/binaries/${AGNT_VER}/generic/go-agent-${AGNT_VER}.zip  -o /tmp/go-agent.zip \
+&& curl https://download.gocd.io/binaries/${AGNT_VER}/generic/go-agent-${AGNT_VER}.zip  -o /tmp/go-agent.zip \
 && mkdir -p /opt \
 && cd /opt \
 && unzip /tmp/go-agent.zip \
