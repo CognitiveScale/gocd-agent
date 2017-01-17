@@ -99,7 +99,7 @@ main()
     local namespace="$IMAGE_NAMESPACE"
     local config_dir="$CONFIG_DIR"
     local workspace="$WORKSPACE"
-    local container_name_prefix="${JOB_ID}"
+    local container_name_prefix="c12e-ci-${JOB_ID}"
 
     local required_work
     required_work="$(
