@@ -151,9 +151,10 @@ main()
             header "publishing Docker image"
             docker_publish "$namespace" "$repo" "$short_tag" "$concern"
             docker rmi --force "$image_hash"
+            write_report "$namespace" "$short_tag" "$workspace" "$to_publish"
         done
 
-    write_report "$namespace" "$short_tag" "$workspace" "$to_publish"
+    
     header "SUCCESS: finished everything"
 
 }
