@@ -364,8 +364,8 @@ write_report()
                 fi
                 if [ "$printed_first" = "true" ]
                 then echo "," >> "$target_dir/buildReport.json"
-                fi
-                cat << EOF > "$target_dir/buildReport.json"
+                else
+                    cat << EOF > "$target_dir/buildReport.json"
 {
    "name": "$repo",
    "docker_file": "$dockerfile",
@@ -374,7 +374,8 @@ write_report()
    "timestamp": "$timestamp"
 }
 EOF
-                printed_first="true"
+                    printed_first="true"
+                fi
             done
         echo "]" >> "$target_dir/buildReport.json"
     fi
