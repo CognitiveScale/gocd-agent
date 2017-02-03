@@ -374,8 +374,7 @@ write_report()
    "timestamp": "$timestamp"
 }
 EOF
-                    printed_first="true"
-                fi
+                printed_first="true"
             done
         echo "]" >> "$target_dir/buildReport.json"
     fi
