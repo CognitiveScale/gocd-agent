@@ -23,7 +23,8 @@ RUN apk --no-cache add  python py-pip bash unzip openjdk8-jre git curl openssh j
 && echo "cruise-output/" >> /root/.config/git/ignore
 
 ADD deploy/run.sh /run.sh
-ADD bin/ /usr/local/bin/
+ENV PATH="/usr/local/ci:${PATH}"
+# ADD bin/ /usr/local/bin/
 ADD etc/ /usr/local/etc/
 ENV JAVA_HOME=/usr GO_SERVER=go-server GO_SERVER_PORT=8153
 WORKDIR /tmp
