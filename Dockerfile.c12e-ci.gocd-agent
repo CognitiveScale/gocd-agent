@@ -20,7 +20,12 @@ RUN apk --no-cache add  python py-pip bash unzip openjdk8-jre git curl openssh j
 && ln -s /opt/${FOLDER_NAME} /opt/go-agent \
 && rm -r /tmp/* \
 && mkdir -p /root/.config/git \
-&& echo "cruise-output/" >> /root/.config/git/ignore
+&& echo "cruise-output/" >> /root/.config/git/ignore \
+&& YQ_VERSION=2.2.1 \
+&& wget https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64 \
+&& mv yq_linux_amd64 yq \
+&& chmod +x yq \
+&& mv yq /usr/local/bin
 
 ADD deploy/run.sh /run.sh
 ENV PATH="/opt/ci/bin:${PATH}"
