@@ -26,7 +26,10 @@ RUN apk --no-cache add python py-pip bash unzip openjdk8-jre git curl openssh jq
 && mv yq_linux_amd64 yq \
 && chmod +x yq \
 && mv yq /usr/local/bin \
-&& pip install awscli
+&& pip install awscli \
+&& wget https://raw.github.com/nvie/gitflow/develop/contrib/gitflow-installer.sh \
+&& chmod +x gitflow-installer.sh \
+&& ./gitflow-installer.sh
 
 ADD deploy/run.sh /run.sh
 ENV PATH="/opt/ci/bin:${PATH}"
