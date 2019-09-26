@@ -11,6 +11,7 @@ RUN apk --no-cache add python python3 py-pip bash unzip openjdk8-jre git curl op
 && rm consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip \
 && mkdir -p /consul-template /consul-template/config.d /consul-template/templates \
 && AGNT_VER=19.3.0-8959 \
+&& HELM_VERSION="v2.14.3" \
 && FOLDER_NAME=go-agent-$(echo $AGNT_VER | cut -d'-' -f1) \
 && curl https://download.gocd.io/binaries/${AGNT_VER}/generic/go-agent-${AGNT_VER}.zip  -o /tmp/go-agent.zip \
 && mkdir -p /opt \
@@ -31,7 +32,10 @@ RUN apk --no-cache add python python3 py-pip bash unzip openjdk8-jre git curl op
 && pip3 install ruamel.yaml \
 && wget https://raw.github.com/nvie/gitflow/develop/contrib/gitflow-installer.sh \
 && chmod +x gitflow-installer.sh \
-&& ./gitflow-installer.sh
+&& ./gitflow-installer.sh \
+&& curl -LO https://storage.googleapis.com/kubernetes-helm/helm-${HELM_VERSION}-linux-amd64.tar.gz \
+&& tar -zxvf helm-${HELM_VERSION}-linux-amd64.tar.gz linux-amd64/helm \
+&& mv linux-amd64/helm /usr/local/bin/helm
 
 ADD deploy/run.sh /run.sh
 ENV PATH="/opt/ci/bin:${PATH}"
