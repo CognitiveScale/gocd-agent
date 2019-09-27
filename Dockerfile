@@ -35,7 +35,8 @@ RUN apk --no-cache add python python3 py-pip bash unzip openjdk8-jre git curl op
 && ./gitflow-installer.sh \
 && curl -LO https://storage.googleapis.com/kubernetes-helm/helm-${HELM_VERSION}-linux-amd64.tar.gz \
 && tar -zxvf helm-${HELM_VERSION}-linux-amd64.tar.gz linux-amd64/helm \
-&& mv linux-amd64/helm /usr/local/bin/helm
+&& mv linux-amd64/helm /usr/local/bin/helm \
+&& helm init --client-only
 
 ADD deploy/run.sh /run.sh
 ENV PATH="/opt/ci/bin:${PATH}"
