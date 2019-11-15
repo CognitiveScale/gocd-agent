@@ -33,9 +33,9 @@ RUN apk --no-cache add python python3 py-pip bash unzip openjdk8-jre git curl op
 && wget https://raw.github.com/nvie/gitflow/develop/contrib/gitflow-installer.sh \
 && chmod +x gitflow-installer.sh \
 && ./gitflow-installer.sh \
-&& wget https://github.com/git-lfs/git-lfs/releases/download/v2.9.0/git-lfs-linux-arm64-v2.9.0.tar.gz \
+&& wget https://github.com/git-lfs/git-lfs/releases/download/v2.9.0/git-lfs-linux-amd64-v2.9.0.tar.gz \
 && mkdir lfs \
-&& tar -xvf git-lfs-linux-arm64-v2.9.0.tar.gz -C ./lfs \
+&& tar -xvf git-lfs-linux-amd64-v2.9.0.tar.gz -C ./lfs \
 && install -v -m 0755 lfs/git-lfs /usr/local/bin/git-lfs \
 && git lfs install \
 && curl -LO https://storage.googleapis.com/kubernetes-helm/helm-${HELM_VERSION}-linux-amd64.tar.gz \
