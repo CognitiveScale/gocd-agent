@@ -2,7 +2,7 @@
 FROM docker:1.11.2-dind
 
 # version is a mess as the zip doesn't include the build number..
-RUN apk --no-cache add python python3 py-pip bash unzip openjdk8-jre git curl openssh jq ca-certificates \
+RUN apk --no-cache add python python3 py-pip bash zip unzip openjdk8-jre git curl openssh jq ca-certificates \
 && CONSUL_TEMPLATE_VERSION=0.14.0 \
 && wget https://releases.hashicorp.com/consul-template/${CONSUL_TEMPLATE_VERSION}/consul-template_${CONSUL_TEMPLATE_VERSION}_linux_amd64.zip \
 && pip3 install -U setuptools wheel \
